@@ -159,6 +159,7 @@ class NeuralNetSimData(list):
 #                    ts[nID].append((i,prop))
                     
         return ts
+
     @property
     def edge_ts(self):
         ts = {} # dict where neuronID is the top key

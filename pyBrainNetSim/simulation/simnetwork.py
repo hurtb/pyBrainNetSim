@@ -8,9 +8,7 @@ Created on Mon Dec 28 09:07:44 2015
 @author: brian
 """
 
-import networkx as nx
-import numpy as np
-import pandas as pd
+
 from pyBrainNetSim.models.network import *
 
 
@@ -73,7 +71,7 @@ class SimNetBase(nx.DiGraph):
         self.add_spontaneous(nd) # add spontaneous firing
         self.find_inactive(nd) # get potential post-synaptic nodes
         self.integrate_action_potentials(nd) # integrate action potentials
-        self.propigate_AP(nd) # Combine propigating and spontaneous action potentials
+        self.propigate_AP(nd) # Combine propagating and spontaneous action potentials
         nd.update_properties()  # update data structures
         self.synapse_plasticity(nd) # Plasticity
         self.migration(nd) # Migrate
@@ -84,15 +82,22 @@ class SimNetBase(nx.DiGraph):
         self.t += self.dt  # step forward in time
         
     def add_driven(self, ng, driven_nodes=None):
-        """Set pre-synaptic driving neurons."""
+        """Set pre-synaptic driving neurons.
+        :param ng:
+        :param driven_nodes:
+        """
         pass
     
     def add_spontaneous(self, ng):
-        """Fxn to setup spontaneuos firing."""
+        """Fxn to setup spontaneuos firing.
+        :param ng:
+        """
         pass
         
     def find_inactive(self, ng):
-        """Retrieves a list of neurons firing within the last 'inactive_period' for each neuron."""
+        """Retrieves a list of neurons firing within the last 'inactive_period' for each neuron.
+        :param ng:
+        """
         pass
      
     def integrate_action_potentials(self, ng):

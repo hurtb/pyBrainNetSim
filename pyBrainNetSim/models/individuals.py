@@ -25,7 +25,7 @@ class SensorMoverBase(Individual):
             self.initial_net = initial_network
         else:
             self.initial_net = rand_sensor_mover(internal_neurons=internal_neurons, edge_weights='Rand',
-                                              sensor_dir=sensors, motor_dir=motor_dir, pct_excit=0.7)
+                                                 sensor_dir=sensors, motor_dir=motor_dir, pct_excit=0.7)
         self.internal = HebbianNetworkBasic(self.initial_net, **kwargs)
         self.internal.initiate_simulation()
         self.motor_activations = []
@@ -61,8 +61,8 @@ class SensorMoverBase(Individual):
                  ng.node[nID]['stimuli_sensitivity'], ng.node[nID]['sensory_mid'])
 
     def _motor_actions(self, ng):
-        mnIDs = [nID for nID,nAttrDict in ng.node.items() 
-                if (nAttrDict['node_class']=='Motor' and nAttrDict['value']>0.)]
+        mnIDs = [nID for nID,nAttrDict in ng.node.items()
+                 if (nAttrDict['node_class']=='Motor' and nAttrDict['value']>0.)]
         move = np.array([0.,0.])
         if mnIDs is None:
             return move
