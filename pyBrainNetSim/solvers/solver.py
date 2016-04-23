@@ -34,13 +34,15 @@ class SensorMoverEvolutionarySolver(object):
     def simulate_generation(self):
         ts, i= [], 0
         while i < self.num_individuals:
-            ts.append(SensorMover(self.environment, position=(5,5), initial_network=self.sm_dist.create_digraph(), **{'initial_fire':'prescribed', 'prescribed':['S0']}))
+            ts.append(SensorMover(self.environment, position=(5, 5),
+                                  initial_network=self.sm_dist.create_digraph(),
+                                  **{'initial_fire':'prescribed', 'prescribed':['S0']}))
             i += 1
         self.data['G%d' % self.g] = ts
 
     def evolve(self, *args, **kwargs):
         """
-        Defines how indivituals evolve from one generation to the next
+        Defines how individuals evolve from one generation to the next
         :param args:
         :param kwargs:
         :return:

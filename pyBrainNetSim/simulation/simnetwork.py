@@ -12,14 +12,14 @@ Created on Mon Dec 28 09:07:44 2015
 from pyBrainNetSim.models.network import *
 
 
-class SimNetBase(nx.DiGraph):
+class SimNetBase(object):
     """
-    
+
     """
     def __init__(self, t0_network, initial_fire='rand', threshold=0.5,
                  initial_N=None, prescribed=None, *args, **kwargs):
-        super(SimNetBase, self).__init__(t0_network, *args)
-        self.initial_net = nx.DiGraph(t0_network,**kwargs)
+        # super(SimNetBase, self).__init__(t0_network, *args)
+        self.initial_net = NeuralNetData(t0_network,**kwargs)
         self.initial_nodes = self.initial_fire(mode=initial_fire,
                                                threshold=threshold,
                                                initial_N=initial_N,
@@ -29,11 +29,9 @@ class SimNetBase(nx.DiGraph):
         
     def simulate(self, **kwargs):
         """ Simulation mode of the network."""
-        # initialize and setup simulation parameters
-        if not self.is_initialized:        
+        if not self.is_initialized:  # initialize and setup simulation parameters
             self.initiate_simulation(**kwargs)
-        # simulation loop
-        while self.t < self.T and not self.simdata[-1].is_dead:
+        while self.t < self.T and not self.simdata[-1].is_dead:  # simulation loop
             self.evolve_time_step()      
 
     def initiate_simulation(self, max_iter=5, dt=1):
@@ -41,21 +39,23 @@ class SimNetBase(nx.DiGraph):
         self.t, self.dt, self.N = 0, dt, max_iter # global time, dt, max iter
         self.T = self.N * self.dt
         self.simdata = NeuralNetSimData()
+        self.simdata.append(NeuralNetData(self.initial_net.copy()))
         self.is_initialized = True
-        
-    def start_timestep(self):
-        if self.t ==0:
-            self.simdata.append(NeuralNetData(self.initial_net.copy(), time=self.t))
-            self.simdata[-1].presyn_nodes = self.initial_nodes
-        else:
-            self.simdata.append(NeuralNetData(self.simdata[-1].copy(), time=self.t))
-            self.simdata[-1].presyn_nodes = self.simdata[-2].postsyn_nodes
+
+    # WILL DELETE
+    # def start_timestep(self):
+    #     if self.t == 0:
+    #         self.simdata.append(NeuralNetData(self.initial_net.copy(), time=self.t))
+    #         self.simdata[-1].presyn_nodes = self.initial_nodes
+    #     else:
+    #         self.simdata.append(NeuralNetData(self.simdata[-1].copy(), time=self.t))
+    #         self.simdata[-1].presyn_nodes = self.simdata[-2].postsyn_nodes
             
     def initial_fire(self, mode='rand', threshold=0.9, rand_N=None, initial_N=0.5, prescribed=None):
         if mode == 'rand':
-            out = np.random.permutation(self.nodes())[np.random.rand(self.number_of_nodes()) < rand_N]
+            out = np.random.permutation(self.initial_net.nodes())[np.random.rand(self.initial_net.number_of_nodes()) < rand_N]
         elif mode == 'rand_pct_N':
-            out = np.random.permutation(self.nodes())[0:int(np.floor(rand_N * self.number_of_nodes()))]
+            out = np.random.permutation(self.initial_net.nodes())[0:int(np.floor(rand_N * self.initial_net.number_of_nodes()))]
         elif mode == 'prescribed':
             out = prescribed
         return out
@@ -64,9 +64,10 @@ class SimNetBase(nx.DiGraph):
         if self.t > 0.:
             if self.simdata[-1].is_dead:
                 return
-        self.start_timestep()
+        # self.start_timestep()
         nd = self.simdata[-1]
 
+        # TODO: Decide whether to move these methods within the NeuralNetData class
         self.add_driven(nd, driven_nodes=driven_nodes) # Externally (forced) action potentials
         self.add_spontaneous(nd) # add spontaneous firing
         self.find_inactive(nd) # get potential post-synaptic nodes
@@ -78,7 +79,9 @@ class SimNetBase(nx.DiGraph):
         self.birth_death(nd) # Neuron Birth
 
 #        self.simdata.update()
-        
+
+        self.simdata.append(NeuralNetData(self.simdata[-1].copy(), time=self.t))
+        self.simdata[-1].presyn_nodes = self.simdata[-2].postsyn_nodes
         self.t += self.dt  # step forward in time
         
     def add_driven(self, ng, driven_nodes=None):
@@ -120,15 +123,15 @@ class SimNetBase(nx.DiGraph):
         """Add/subtract neurons."""        
         pass
     
-    def generate_spontaneous(self, threshold=0.9, active_vector=None):
-        """ 
-        Generate spontaneous firing. Uses a basic random number generator with
-        thresholding. FUTURE: add random "voltage" to the presynaptic inputs.
-        """
-        out = (np.random.rand(len(self.nodes())) < threshold).astype(float)
-        if active_vector is None:
-            return np.where(out == 1)[0]
-        return np.multiply(out, active_vector)  # vector of 0|1 ordered by .nodes()
+    # def generate_spontaneous(self, threshold=0.9, active_vector=None):
+    #     """
+    #     Generate spontaneous firing. Uses a basic random number generator with
+    #     thresholding. FUTURE: add random "voltage" to the presynaptic inputs.
+    #     """
+    #     out = (np.random.rand(len(self.nodes())) < threshold).astype(float)
+    #     if active_vector is None:
+    #         return np.where(out == 1)[0]
+    #     return np.multiply(out, active_vector)  # vector of 0|1 ordered by .nodes()
     
 
 class SimNetBasic(SimNetBase):
@@ -138,9 +141,7 @@ class SimNetBasic(SimNetBase):
     
     def add_spontaneous(self, ng):
         """Fxn to setup spontaneous firing."""
-        thresh = nx.get_node_attributes(ng, 'spontaneity').values()
-        ng.spont_nodes = ng.vector_to_nodeIDs(
-            self.generate_spontaneous(threshold=thresh, active_vector=ng.active_vector))
+        ng.spont_nodes = ng.vector_to_nodeIDs(ng.generate_spontaneous())
         
     def find_inactive(self, ng):
         """Retrieves a list of neurons firing within the last 'inactive_period' for each neuron."""
@@ -148,8 +149,8 @@ class SimNetBasic(SimNetBase):
         for nID, in_per in nx.get_node_attributes(ng, 'inactive_period').items():
             if in_per == 0.:
                 continue
-            if in_per > len(self):
-                in_per = len(self)
+            if in_per > len(ng):
+                in_per = len(ng)
             numfire = self.simdata.get_node_dynamics('presyn_vector')[nID][-int(in_per):].sum()
             if numfire > 0.:
                 inact.append(nID)

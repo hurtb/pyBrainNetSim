@@ -15,18 +15,15 @@ import matplotlib.text as mtext
 
 class vTrajectory(LineCollection):
     def __init__(self, points, base_clr=(0, 0, 0), *args, **kwargs):
-        # we'll update the position when the line data is set
-        self.text = mtext.Text(0, 0, '')
-        t = np.linspace(0, 1, points.shape[0]) # your "time" variable
+        self.text = mtext.Text(0, 0, '') # update the position when the line data is set
+        t = np.linspace(0, 1, points.shape[0]) # "time" variable
         # set up a list of segments
         segs = np.concatenate([points[:-1],points[1:]], axis=1)
         cmp1 = LinearSegmentedColormap.from_list("my_cmp", ((1, 1, 1), base_clr))
-        
         super(vTrajectory, self).__init__(segs, cmap=cmp1, *args, **kwargs)
         self.set_array(t)
 
-        # we can't access the label attr until *after* the line is
-        # inited
+        # can't access the label attr until *after* the line is inited
         self.text.set_text(self.get_label())
 
     def set_figure(self, figure):
