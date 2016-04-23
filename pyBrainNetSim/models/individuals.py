@@ -89,7 +89,7 @@ class SensorMoverBase(Individual):
     def sensory_gradients(self):
         return np.array(self._sensory_gradients)
 
-    def efficiency(self, to='food', *args, **kwargs):
+    def efficiency(self, to='Sensory', *args, **kwargs):
         """
         Method used to measure of how much motor energy has been expended in an effort to get to the target.
         efficiency = convolution(sensory gradient, velocity) / motor energy expenditure

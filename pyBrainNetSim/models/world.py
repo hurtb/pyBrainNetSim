@@ -107,47 +107,6 @@ class Attractor(object):
 
         self.field_type = 'exponential' # 'linear'|'exponential'
         self.decay_rate = 1.
-
-    # def field_function(self, c_grid):
-    #     p_grid = cart2pol(c_grid, x0=self.position)
-    #     if self.field_type == 'exponential':
-    #         scalar = self._exp_field(p_grid[0])
-    #     elif self.field_type == 'linear':
-    #         scalar = self._linear_field(p_grid[0])
-    #     return scalar
-    #
-    # def _linear_field(self, r):
-    #     return np.max([self.strength - r * self.decay_rate, 0])
-    #
-    # def _exp_field(self, r):
-    #     return self.strength * np.exp(-r * self.decay_rate)
-    #
-    # def _exp_field_cartesian(self, pos, pos0):
-    #     return self._exp_field(euclidean(pos, pos0))
-    #
-    # def _linear_field_cartesian(self, pos, pos0):
-    #     return self._linear_field(euclidean(pos, pos0))
-
-    #
-    #
-    # def field_at(self, position):
-    #     """Return attractor field strength at position
-    #     :param position:
-    #     """
-    #     if self.field_type == "linear":
-    #         return self._linear_field(euclidean(self.position, position))
-    #     elif self.field_type == "exponential":
-    #         return self._exp_field(euclidean(self.position, position))
-    #
-    # def gradient_at(self, position):
-    #     grad = np.gradient(self.field, dtype=np.float)
-    #     return [grad[dim][position][dim] for dim in range(len(position))]
-    #
-    # def evolve_diffuse(self, permeability):
-    #     """ Diffusion process $dF/dt = \alpha\nabla^2 F$ """
-    #     # TODO: create dynamically changing fields
-    #     pass
-
     
 class Individual(object):
     
