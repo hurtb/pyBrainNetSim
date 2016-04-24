@@ -27,6 +27,6 @@ if __name__ == '__main__':
     ev = EvolutionarySolverTest(e0, num_individuals=10)
     ev.test1()
 #    print ts.trajectory
-#    print ts.internal.simdata.get_node_dynamics('presyn_vector')
+#    print ts.internal.simdata.node_group_properties('presyn_vector')
 #    print dat.neuron_ts(neuronID='S0',prop='energy_value')
-#    print dat.get_node_dynamics('presyn_vector')[sorted(d0.nodes())]
+#    print dat.node_group_properties('presyn_vector')[sorted(d0.nodes())]

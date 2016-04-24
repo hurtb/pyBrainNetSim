@@ -29,7 +29,7 @@ class PropertyDistribution(object):
     def sample_field(self, field, name=None):
         return self._chk_rand(field)
 
-    def sample(self, nID = None, *args, **kwargs):
+    def sample(self, nID=None, *args, **kwargs):
         out = {key: self.sample_field(val, key) for key, val in self.__dict__.iteritems()}
         out.update({'id': nID})
         return out
@@ -60,7 +60,6 @@ class InternalPropertyDistribution(PropertyDistribution):
         self.number_neurons = INTERNAL_NUMBER_OF_NEURONS
         self.excitatory_to_inhibitory = INTERNAL_EXCIT_TO_INHIB
         self.physical_distribution = INTERNAL_PHYSICAL_DISTRIBUTION
-
         self.node_class = INTERNAL_NODE_CLASS
         self.value = INTERNAL_VALUE
         self.energy_value = INTERNAL_ENERGY

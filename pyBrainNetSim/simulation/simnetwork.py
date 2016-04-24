@@ -10,7 +10,7 @@ Created on Mon Dec 28 09:07:44 2015
 
 
 from pyBrainNetSim.models.network import *
-
+from scipy.stats import uniform
 
 class SimNetBase(object):
     """
@@ -18,10 +18,8 @@ class SimNetBase(object):
     """
     def __init__(self, t0_network, initial_fire='rand', threshold=0.5,
                  initial_N=None, prescribed=None, *args, **kwargs):
-        # super(SimNetBase, self).__init__(t0_network, *args)
         self.initial_net = NeuralNetData(t0_network,**kwargs)
-        self.initial_nodes = self.initial_fire(mode=initial_fire,
-                                               threshold=threshold,
+        self.initial_nodes = self.initial_fire(mode=initial_fire, threshold=threshold,
                                                initial_N=initial_N,
                                                prescribed=prescribed)
         self.threshold = threshold
@@ -34,23 +32,13 @@ class SimNetBase(object):
         while self.t < self.T and not self.simdata[-1].is_dead:  # simulation loop
             self.evolve_time_step()      
 
-    def initiate_simulation(self, max_iter=5, dt=1):
-        # setup parameters
+    def initiate_simulation(self, max_iter=5, dt=1): # setup parameters
         self.t, self.dt, self.N = 0, dt, max_iter # global time, dt, max iter
         self.T = self.N * self.dt
         self.simdata = NeuralNetSimData()
         self.simdata.append(NeuralNetData(self.initial_net.copy()))
         self.is_initialized = True
 
-    # WILL DELETE
-    # def start_timestep(self):
-    #     if self.t == 0:
-    #         self.simdata.append(NeuralNetData(self.initial_net.copy(), time=self.t))
-    #         self.simdata[-1].presyn_nodes = self.initial_nodes
-    #     else:
-    #         self.simdata.append(NeuralNetData(self.simdata[-1].copy(), time=self.t))
-    #         self.simdata[-1].presyn_nodes = self.simdata[-2].postsyn_nodes
-            
     def initial_fire(self, mode='rand', threshold=0.9, rand_N=None, initial_N=0.5, prescribed=None):
         if mode == 'rand':
             out = np.random.permutation(self.initial_net.nodes())[np.random.rand(self.initial_net.number_of_nodes()) < rand_N]
@@ -61,29 +49,30 @@ class SimNetBase(object):
         return out
         
     def evolve_time_step(self, driven_nodes=None):
-        if self.t > 0.:
-            if self.simdata[-1].is_dead:
-                return
-        # self.start_timestep()
         nd = self.simdata[-1]
 
-        # TODO: Decide whether to move these methods within the NeuralNetData class
         self.add_driven(nd, driven_nodes=driven_nodes) # Externally (forced) action potentials
-        self.add_spontaneous(nd) # add spontaneous firing
-        self.find_inactive(nd) # get potential post-synaptic nodes
-        self.integrate_action_potentials(nd) # integrate action potentials
-        self.propigate_AP(nd) # Combine propagating and spontaneous action potentials
+        self.add_spontaneous(nd)  # add spontaneous firing
+        self.find_inactive(nd)  # get potential post-synaptic nodes
+        self.integrate_action_potentials(nd)  # integrate action potentials
+        self.propigate_AP(nd)  # Combine propagating and spontaneous action potentials
         nd.update_properties()  # update data structures
-        self.synapse_plasticity(nd) # Plasticity
-        self.migration(nd) # Migrate
-        self.birth_death(nd) # Neuron Birth
+        self.synapse_plasticity(nd)  # Plasticity
+        self.migration(nd)  # Migrate
+        self.birth_death(nd)  # Neuron Birth
 
-#        self.simdata.update()
-
+        if self.simdata[-1].is_dead:
+            return
         self.simdata.append(NeuralNetData(self.simdata[-1].copy(), time=self.t))
+        self.simdata[-1].dead_nodes = self.simdata[-2].dead_nodes
         self.simdata[-1].presyn_nodes = self.simdata[-2].postsyn_nodes
         self.t += self.dt  # step forward in time
-        
+
+    def add_energy(self, amount):
+        amount_per_neuron = np.floor(float(amount) / self.simdata[-1].number_of_nodes())
+        for n_id in self.simdata[-1].nodes():
+            self.simdata[-1].node[n_id]['energy_value'] += amount_per_neuron
+
     def add_driven(self, ng, driven_nodes=None):
         """Set pre-synaptic driving neurons.
         :param ng:
@@ -123,16 +112,6 @@ class SimNetBase(object):
         """Add/subtract neurons."""        
         pass
     
-    # def generate_spontaneous(self, threshold=0.9, active_vector=None):
-    #     """
-    #     Generate spontaneous firing. Uses a basic random number generator with
-    #     thresholding. FUTURE: add random "voltage" to the presynaptic inputs.
-    #     """
-    #     out = (np.random.rand(len(self.nodes())) < threshold).astype(float)
-    #     if active_vector is None:
-    #         return np.where(out == 1)[0]
-    #     return np.multiply(out, active_vector)  # vector of 0|1 ordered by .nodes()
-    
 
 class SimNetBasic(SimNetBase):
     def add_driven(self, ng, driven_nodes=None):
@@ -141,7 +120,9 @@ class SimNetBasic(SimNetBase):
     
     def add_spontaneous(self, ng):
         """Fxn to setup spontaneous firing."""
-        ng.spont_nodes = ng.vector_to_nodeIDs(ng.generate_spontaneous())
+        # ng.spont_nodes = ng.vector_to_nodeIDs(self.generate_spontaneous(ng))
+        ng.spont_signal = self.generate_spontaneous(ng)
+
         
     def find_inactive(self, ng):
         """Retrieves a list of neurons firing within the last 'inactive_period' for each neuron."""
@@ -151,7 +132,7 @@ class SimNetBasic(SimNetBase):
                 continue
             if in_per > len(ng):
                 in_per = len(ng)
-            numfire = self.simdata.get_node_dynamics('presyn_vector')[nID][-int(in_per):].sum()
+            numfire = self.simdata.node_group_properties('presyn_vector')[nID][-int(in_per):].sum()
             if numfire > 0.:
                 inact.append(nID)
         ng.inactive_nodes = inact
@@ -163,9 +144,38 @@ class SimNetBasic(SimNetBase):
     def propigate_AP(self, ng):
         """Propigate AP from pre to post given the network's thresholds."""
         thresh = nx.get_node_attributes(ng, 'threshold').values()
-        ng.prop_vector = (ng.postsyn_signal + ng.spont_vector + ng.driven_vector > thresh).astype(float)
+        ng.prop_vector = (ng.postsyn_signal + ng.spont_signal + ng.driven_vector > thresh).astype(float)
         AP_vector = np.multiply(ng.prop_vector, ng.active_vector)
+        AP_vector = np.multiply(AP_vector, ng.alive_vector)
         ng.postsyn_nodes = ng.vector_to_nodeIDs(AP_vector)
+
+    def generate_spontaneous_thresh(self, ng):
+        """
+        Generate spontaneous firing. Uses a basic random number generator with
+        thresholding. FUTURE: add random "voltage" to the presynaptic inputs.
+        """
+        out = (np.random.rand(len(ng.nodes())) < nx.get_node_attributes(ng, 'threshold').values()).astype(float)
+        if ng.active_vector is None:
+            return np.where(out == 1)[0]
+        out[[ng.nID_to_nIx[n_id] for n_id in ng.dead_nodes]] = 0.
+        out = np.multiply(out, ng.active_vector)
+        return out  # vector of 0|1 ordered by .nodes()
+
+    def generate_spontaneous(self, ng):
+        """
+        Generate spontaneous firing. Uses a basic random number generator with
+        thresholding. FUTURE: add random "voltage" to the presynaptic inputs.
+        """
+        out = []
+        for n_id in ng.nodes():
+            smin = ng.node[n_id]['spontaneity']*ng.node[n_id]['threshold']
+            smax = smin + 1.
+            out.append(uniform(loc=smin, scale=smax).rvs())
+        out = np.array(out)
+        out[[ng.nID_to_nIx[n_id] for n_id in ng.inactive_nodes]] = 0.
+        out[[ng.nID_to_nIx[n_id] for n_id in ng.dead_nodes]] = 0.
+        out = np.multiply(out, ng.active_vector)
+        return out  # vector of 0|1 ordered by .nodes()
 
 
 class HebbianNetworkBasic(SimNetBasic):
@@ -177,7 +187,6 @@ class HebbianNetworkBasic(SimNetBasic):
         x = np.matrix([nx.get_node_attributes(ng, 'value')[nID] for nID in ng.nodes()])
         dW = eta_pos * np.multiply(x.T * x, ng.synapses > 0)
         Wn = ng.synapses + dW
-        vals = dict(((node[i],node[j]), Wn[i,j]) \
-            for i in range(Wn.shape[1]) \
-            for j in range(Wn.shape[0]) if (Wn[i,j]>0. and i != j))
+        vals = dict(((node[i],node[j]), Wn[i, j]) for i in range(Wn.shape[1]) for j in range(Wn.shape[0])
+                    if (Wn[i, j]> 0. and i != j))
         nx.set_edge_attributes(ng, 'weight', vals)

@@ -8,6 +8,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from pyBrainNetSim.drawing.viewers import vTrajectory
 from scipy.spatial.distance import euclidean
+from scipy.stats import randint
 from pyBrainNetSim.utils import  cart2pol
 
 
@@ -18,9 +19,10 @@ class Environment(object):
         self.d_size, self.origin, self.max_point, self.deltas, self.c_grid = None, None, None, None, None
         self.change_world(origin, max_point, deltas)
         self._individuals = []
-        self.attractors = []
+        self.attractors = {}
         self.decay_rate = 0.5
         self.fields = {'Sensory': ExponentialDecayScalarField('Sensory', self.c_grid, self.decay_rate )}
+        self.an = 0  # counter for attractors
 
     def change_world(self, origin, max_point, deltas=1.):
         self.d_size = len(max_point)
@@ -51,8 +53,22 @@ class Environment(object):
         """ e.g. food
         :param attr:
         """
-        self.attractors.append(attr)
-        self.fields[field_type].add_point_source(attr.position, attr.strength)
+        attr.a_id = 's%s' % self.an if attr.a_id is None else attr.a_id
+        self.attractors.update({attr.a_id: attr})
+        self.fields[field_type].add_point_source(attr.a_id, attr.position, attr.strength)
+        self.an += 1
+
+    def add_random_attractor(self, field_type='Sensory'):
+        pos = np.array([randint(low=self.origin[i], high=self.max_point[i]).rvs() for i in range(self.d_size)])
+        attract = Attractor(self, pos, a_id='s%s' % self.an,
+                            strength=randint(low=8, high=20),
+                            energy_value=randint(low=50, high=100),
+                            attractor_type=field_type)
+        self.add_attractor(attract, field_type)
+
+    def rm_attractor(self, a_id):
+        self.fields[self.attractors[a_id].field_type].rm_point_source(a_id)
+        del(self.attractors[a_id])
 
     def attractor_field_at(self, location, field_type='Sensory', attractor_id=None):
         """
@@ -97,17 +113,22 @@ class Environment(object):
 
 
 class Attractor(object):
-    def __init__(self, environment, position, strength, energy_value=100,
+    def __init__(self, environment, position, strength, a_id=None, energy_value=100,
                  attractor_type='Sensory'):
-        self.position = position
+        self.a_id = a_id
+        self.position = np.array(position)
         self.strength = strength
         self.energy_value = energy_value  # used to give the SensorMover if they converge to it.
         environment.add_attractor(self, attractor_type)
         self.environment = environment
 
-        self.field_type = 'exponential' # 'linear'|'exponential'
-        self.decay_rate = 1.
-    
+        self.field_type = 'Sensory'
+
+    @property
+    def decay_rate(self):
+        return self.environment.decay_rate
+
+
 class Individual(object):
     
     def __init__(self, environment=None, position=None, *args, **kwargs):
@@ -116,22 +137,22 @@ class Individual(object):
             self.d_size = environment.d_size
         self.environment = environment
         if position  is None:
-            self._position = np.array([0, 0])
+            self._position = np.array([0., 0.])
         elif len(position) == environment.d_size:
-            self._position = np.array(position)
+            self._position = np.array(position).astype(np.float)
         elif position == 'rand':
             self._position = [np.random.randint(0, environment.max_point[0]),
                               np.random.randint(0, environment.max_point[1])]
         else:
-            self._position = np.array([0,0])
+            self._position = np.array([0., 0.])
 
         self._trajectory = [self._position.copy()]        
         
     def move(self, vector):
         if len(vector) == self.d_size:
-            self._position += np.array(vector)
+            self._position += np.array(vector, dtype=np.float)
             self._trajectory.append(self._position.copy())
-            
+
     def set_trajectory(self, trajectory):
         self._trajectory = trajectory
 
@@ -188,8 +209,12 @@ class ScalarField(object):
     def function(self, *args, **kwargs):
         return np.zeros_like(self.c_grid[0])
 
-    def add_point_source(self, location, strength):
-        self.sources.update({'%s' % (len(self.sources)+1): {'location': location, 'strength': strength}})
+    def add_point_source(self, a_id, location, strength):
+        self.sources.update({a_id: {'location': location, 'strength': strength}})
+        self._update_field()
+
+    def rm_point_source(self, point_source_id):
+        del(self.sources[point_source_id])
         self._update_field()
 
     def _update_field(self):
@@ -204,7 +229,7 @@ class ScalarField(object):
         return _field
 
     def field_at(self, location, source_id=None):
-        indx = self._loc_to_indx(location)
+        indx = self._loc_to_indx(location).astype(np.int)
         _field = 0.
         if self.d_size == 1:
             _field = self.field(source_id)[indx]
@@ -221,7 +246,7 @@ class ScalarField(object):
         return _grad
 
     def gradient_at(self, location, source_id=None):
-        indx = self._loc_to_indx(location)
+        indx = self._loc_to_indx(location).astype(np.int)
         _grad = grad = self.gradient(source_id)
         if self.d_size == 1:
             grad = np.array([_grad[indx]])

@@ -103,31 +103,31 @@ def sensor_mover(sensor_dir=None, motor_dir=None, internal_neurons=16, props=Non
     G.name = "Hopfield Machine"
     return G
 
-
-def rand_internal_network(internal_neurons=16, pct_excit=0.5, edge_weights='rand', **kwargs):
-    G = nx.DiGraph()
-    i_pos = __setup_positions(internal_neurons)  # setup positions
-    my_weights = __generate_weights(edge_weights, internal_neurons ** 2 - internal_neurons)
-    node_polarity = bernoulli(pct_excit)  # random variable
-    for i in range(internal_neurons):
-        G.add_node('I%d' % i, pos=i_pos[i], **random_internal_neuron_prop(ntype=node_polarity, **kwargs).copy())
-    G = __set_edge_weights(G, my_weights)
-    return G
-
-
-def rand_sensor_mover(internal_neurons=16, edge_weights=None, sensor_dir=None, motor_dir=None, **kwargs):
-    G = rand_internal_network(internal_neurons=internal_neurons, edge_weights=edge_weights, **kwargs)
-    s_pos, m_pos = range(1, len(sensor_dir) + 1), range(1, len(motor_dir) + 1)
-    sensor_props = random_sensory_neuron_prop().copy()
-    motor_props = random_motor_neuron_prop().copy()
-    for i, sdir in enumerate(sensor_dir):
-        G.add_node('S%d' % i, pos=(0, s_pos[i]), sensor_direction=sdir, **sensor_props.copy())
-        G.add_edge('S%d' % i, 'I%d' % i, weight=1.)
-
-    for j, fdir in enumerate(motor_dir):  # alter for i,dir in ...:
-        G.add_node('M%d' % j, pos=(m_pos[j], 0), force_direction=fdir, **motor_props.copy())
-        G.add_edge('I%d' % max([internal_neurons - j - 1, 0]), 'M%d' % j, weight=1.)
-
-    G.name = "Hopfield Machine"
-    return G
-
+# MARKED FOR DELETION
+# def rand_internal_network(internal_neurons=16, pct_excit=0.5, edge_weights='rand', **kwargs):
+#     G = nx.DiGraph()
+#     i_pos = __setup_positions(internal_neurons)  # setup positions
+#     my_weights = __generate_weights(edge_weights, internal_neurons ** 2 - internal_neurons)
+#     node_polarity = bernoulli(pct_excit)  # random variable
+#     for i in range(internal_neurons):
+#         G.add_node('I%d' % i, pos=i_pos[i], **random_internal_neuron_prop(ntype=node_polarity, **kwargs).copy())
+#     G = __set_edge_weights(G, my_weights)
+#     return G
+#
+#
+# def rand_sensor_mover(internal_neurons=16, edge_weights=None, sensor_dir=None, motor_dir=None, **kwargs):
+#     G = rand_internal_network(internal_neurons=internal_neurons, edge_weights=edge_weights, **kwargs)
+#     s_pos, m_pos = range(1, len(sensor_dir) + 1), range(1, len(motor_dir) + 1)
+#     sensor_props = random_sensory_neuron_prop().copy()
+#     motor_props = random_motor_neuron_prop().copy()
+#     for i, sdir in enumerate(sensor_dir):
+#         G.add_node('S%d' % i, pos=(0, s_pos[i]), sensor_direction=sdir, **sensor_props.copy())
+#         G.add_edge('S%d' % i, 'I%d' % i, weight=1.)
+#
+#     for j, fdir in enumerate(motor_dir):  # alter for i,dir in ...:
+#         G.add_node('M%d' % j, pos=(m_pos[j], 0), force_direction=fdir, **motor_props.copy())
+#         G.add_edge('I%d' % max([internal_neurons - j - 1, 0]), 'M%d' % j, weight=1.)
+#
+#     G.name = "Hopfield Machine"
+#     return G
+#

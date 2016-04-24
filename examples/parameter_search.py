@@ -68,4 +68,4 @@ if __name__ == '__main__':
     d1 = dat[1]
     d2 = dat[2]
     print ts.trajectory
-    print ts.internal.simdata.get_node_dynamics('presyn_vector')
+    print ts.internal.simdata.node_group_properties('presyn_vector')
