@@ -22,7 +22,8 @@ class NeuralNetData(nx.DiGraph):
         self.presyn_nodes = []
         self.postsyn_nodes = []
         self.postsyn_signal = None
-        self.spont_nodes = []
+        # self.spont_nodes = []
+        self.spont_signal = np.zeros(self.number_of_nodes())
         self.driven_nodes = []
         self.prop_vector = None
         self.dead_nodes = []
@@ -39,23 +40,13 @@ class NeuralNetData(nx.DiGraph):
         for nID in self.presyn_nodes:
             self.node[nID]['energy_value'] = self.node[nID]['energy_dynamics'](self.node[nID]['energy_value'],
                                                                                self.node[nID]['energy_consumption'])
-        self.dead_nodes = [nID for nID in self.nodes() if self.node[nID]['energy_value'] <=0.]
+        self.dead_nodes = [nID for nID in self.nodes() if self.node[nID]['energy_value'] <= 0.]
 
     def __update_props(self, nIDs, **kwargs):
         if nIDs is None:
             return
         for nID in nIDs:
             self.node[nID].update(**kwargs)
-
-    def generate_spontaneous(self):
-        """
-        Generate spontaneous firing. Uses a basic random number generator with
-        thresholding. FUTURE: add random "voltage" to the presynaptic inputs.
-        """
-        out = (np.random.rand(len(self.nodes())) < nx.get_node_attributes(self, 'threshold').values()).astype(float)
-        if self.active_vector is None:
-            return np.where(out == 1)[0]
-        return np.multiply(out, self.active_vector)  # vector of 0|1 ordered by .nodes()
 
     def nodes(self, node_class=None):
         nodes = super(nx.DiGraph, self).nodes()
@@ -103,7 +94,8 @@ class NeuralNetData(nx.DiGraph):
 
     @property
     def spont_vector(self):
-        return self.nodeIDs_to_vector(self.spont_nodes)
+        return self.spont_signal
+        # return self.nodeIDs_to_vector(self.spont_nodes)
 
     @property
     def driven_vector(self):        
@@ -118,12 +110,33 @@ class NeuralNetData(nx.DiGraph):
         return out
 
     @property
+    def total_energy(self):
+        return self.energy_vector.sum()
+
+    @property
+    def total_neurons(self):
+        return self.number_of_nodes()
+
+    @property
+    def alive_vector(self):
+        return (self.dead_vector == 0).astype(float)
+
+    @property
+    def alive_nodes(self):
+        return self.vector_to_nodeIDs(self.alive_vector)
+
+    @property
     def dead_vector(self):
         return self.nodeIDs_to_vector(self.dead_nodes)
 
     @property
     def is_dead(self):
         return True if np.all(self.dead_vector == 1.) else False
+
+    @property
+    def excitatory_to_inhibitory_ratio(self):
+        nc = np.array([attr['node_type'] for attr in self.node.itervalues() if attr['node_class'] == 'Internal'])
+        return (nc == 'E').sum().astype(np.float) / len(self.nodes(node_class='Internal'))
         
     def nodeIDs_to_vector(self, nIDs):
         vector = np.zeros(self.number_of_nodes())
@@ -133,12 +146,12 @@ class NeuralNetData(nx.DiGraph):
         return vector
         
     def vector_to_nodeIDs(self, vector):
-        return np.array(self.nodes())[vector==1.].tolist()          
+        return np.array(self.nodes())[vector == 1.].tolist()
 
     def __repr__(self):
-        return "t: %s\nTotal Nodes: %d\nPre: %s\nInactive: %s\nSpont: %s\nPost: %s" \
+        return "t: %s\nTotal Nodes: %d\nPre: %s\nInactive: %s\nPost: %s" \
             % (self.t, self.number_of_nodes(), self.presyn_nodes,
-               self.inactive_nodes, self.spont_nodes, self.postsyn_nodes)
+               self.inactive_nodes, self.postsyn_nodes)
         
      
 class NeuralNetSimData(list):
@@ -165,36 +178,86 @@ class NeuralNetSimData(list):
     def active(self):
         return pd.DataFrame(self._active)
 
-    def get_node_dynamics(self, node_attribute):
+    def node_group_properties(self, node_attribute):
+        """
+        Return a dataframe with the
+        :param node_attribute:
+        :return pandas DataFrame:
+        """
         out = []
         for state in self:
             out.append(getattr(state, node_attribute))
-        return pd.DataFrame(out, columns=self[-1].nodes())
+        if self[-1].number_of_nodes() == len(out) and len(out[0]) > 1:
+            out = pd.DataFrame(out, columns=self[-1].nodes())
+        else:
+            out = pd.Series(out, index=range(len(self)))
+        return out
         # return pd.DataFrame(out, columns=sorted(self[-1].nodes()))
 
     def neuron_ts(self, prop, neuron_id=None):
+        """
+        Return a dict for the time-series data for the node's property.
+        :param prop: any node property
+        :param neuron_id: any neuron ID. Can be list, or string. If none, returns every node.
+        :return: dict of
+        """
         if prop is None:  # entire list of attributes;
             return []  # TEMPORARY
         ts = {}
         for i, nn in enumerate(self):
             for node, attr in nn.node.iteritems():
                 if node not in ts:
-                    ts.update({node: []})
+                    ts.update({node: {}})
                 if prop not in attr:
-                    ts[node].append((i, None))
-                else: ts[node].append((i, attr[prop]))
+                    ts[node].update({i: None})
+                else:
+                    ts[node].update({i: attr[prop]})
         out = ts
         if isinstance(neuron_id, (list, tuple, np.ndarray)):
             out = {n_id: ts[n_id] for n_id in neuron_id}
-
         elif isinstance(neuron_id, str):
             out = {neuron_id, ts[neuron_id]}
-
         return out
 
-    def edge_ts(self):
-        ts = {} # dict where neuronID is the top key
-        for i in range(len(self)):
-            if not ts.has_key(neuronID):
-                ts.update({neuronID:[]})
-            ts[neuronID].append((i,self[i].node[neuronID][prop]))
+    def edge_ts(self, pairs, prop):
+        """
+        Return a dict for the time-series data for the connection edge's property.
+        :param pairs: (node1, node2)
+        :param prop: any edge attribute
+        :return: dict
+        """
+        ts = {} # dict where {(afferent, efferent): [time series]}
+        pairs = pairs if len(pairs) > 2 and len(pairs[0])>1 else [pairs]
+        for i, nn in enumerate(self):
+            ed = nx.get_edge_attributes(nn, prop)
+            for pair in pairs:
+                if pair not in ed:
+                    continue
+                if pair not in ts:
+                    ts.update({pair: {}})
+                ts[pair].append({i: ed[pair]})
+        return ts
+
+    @property
+    def total_energy(self):
+        return pd.DataFrame(self.neuron_ts('energy_value')).sum(axis=1)
+
+    @property
+    def total_neurons(self):
+        return pd.Series({t: nn.number_of_nodes() for t, nn in enumerate(self)})
+
+    @property
+    def total_neurons_alive(self):
+        return pd.Series({t: nn.alive_vector.sum() for t, nn in enumerate(self)})
+
+    @property
+    def total_neurons_dead(self):
+        return pd.Series({t: nn.dead_vector.sum() for t, nn in enumerate(self)})
+
+    @property
+    def fraction_neurons_alive(self):
+        return self.total_neurons_alive / self.total_neurons
+
+    @property
+    def fraction_neurons_dead(self):
+        return 1. - self.fraction_neurons_alive

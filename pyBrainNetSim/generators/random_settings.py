@@ -22,7 +22,7 @@ INTERNAL_ENERGY_CONSUMPTION = 1.  #
 INTERNAL_ENERGY_DYNAMICS = EnergyDynamics.linear
 INTERNAL_THRESHOLD = uniform(loc=0.7, scale=1.2)
 INTERNAL_THRESHOLD_FXN = 'Future'  # placeholder; to
-INTERNAL_SPONTANEITY = uniform(loc=0.7, scale=1.2)
+INTERNAL_SPONTANEITY = uniform(loc=0., scale=1.)  #
 INTERNAL_INACTIVE_PERIOD = 0.  # may change the way inactivation works in the future by hyperpolarization
 INTERNAL_VALUE = 0.  # initial value
 # ----------------------------------------------

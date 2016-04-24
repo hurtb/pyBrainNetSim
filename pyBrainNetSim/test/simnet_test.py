@@ -34,4 +34,4 @@ if __name__ == '__main__':
     col_order.reverse()
     nx.draw_networkx(ts.simdata[-1], pos=nx.get_node_attributes(ts.simdata[-1],'pos'))
     
-    print ts.simdata.get_node_dynamics('presyn_vector')[col_order]
+    print ts.simdata.node_group_properties('presyn_vector')[col_order]
