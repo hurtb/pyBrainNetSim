@@ -6,22 +6,25 @@ Created on Sun Jan 17 13:16:58 2016
 """
 import numpy as np
 import matplotlib.pyplot as plt
+from matplotlib.colors import BoundaryNorm
+from matplotlib.ticker import MaxNLocator
 from pyBrainNetSim.drawing.viewers import vTrajectory
 from scipy.spatial.distance import euclidean
 from scipy.stats import randint
+from scipy.ndimage import zoom
 from pyBrainNetSim.utils import  cart2pol
 
 
 class Environment(object):
     
-    def __init__(self, origin=(0., 0.), max_point=(20., 20.), deltas=1., *args, **kwargs):
+    def __init__(self, origin=(0., 0.), max_point=(20., 20.), deltas=1., field_permeability=0.5, *args, **kwargs):
 
         self.d_size, self.origin, self.max_point, self.deltas, self.c_grid = None, None, None, None, None
         self.change_world(origin, max_point, deltas)
         self._individuals = []
         self.attractors = {}
-        self.decay_rate = 0.5
-        self.fields = {'Sensory': ExponentialDecayScalarField('Sensory', self.c_grid, self.decay_rate )}
+        self.field_permeability = 0.5
+        self.fields = {'Sensory': ExponentialDecayScalarField('Sensory', self.c_grid, self.field_permeability)}
         self.an = 0  # counter for attractors
 
     def change_world(self, origin, max_point, deltas=1.):
@@ -46,7 +49,7 @@ class Environment(object):
         self.c_grid = np.mgrid[slices]  # cartesian grid
 
     def add_individual(self, individual):
-        if type(individual) in ['Individual']:
+        if isinstance(individual, Individual):
             self._individuals.append(individual)
         
     def add_attractor(self, attr, field_type):
@@ -70,6 +73,9 @@ class Environment(object):
         self.fields[self.attractors[a_id].field_type].rm_point_source(a_id)
         del(self.attractors[a_id])
 
+    def attractor_field(self, field_type='Sensory', attractor_id=None):
+        return self.fields[field_type].field(source_id=attractor_id)
+
     def attractor_field_at(self, location, field_type='Sensory', attractor_id=None):
         """
         Returns the summed field at the location. Assumes the fields are of the same type.
@@ -88,18 +94,56 @@ class Environment(object):
         """
         return self.fields[field_type].gradient_at(location, source_id=attractor_id)
 
-    def plot_individual_trajectories(self, ax=None):
-        # TODO 3. Create a viewing method.
+    def plot_attractor_field(self, field_type='Sensory', attractor_id=None, upsample_factor=1, ax=None, **kwargs):
         if ax is None:
             fig, ax = plt.subplots()
-        # lines = vTrajectory(x, y)
-        # lines.text.set_fontsize(9)
-        # ax.hold()
-        # ax.scatter(*lines.get_segments()[-1][-1])
-        # ax.add_collection(lines)
-        # ax.set_xlim(left=self.x_min, right=self.x_max)
-        # ax.set_ylim(bottom=self.y_min, top=self.y_max)
-    
+        dx, dy = 0.05, 0.05
+        cmap = plt.get_cmap('Blues')
+        if upsample_factor > 1:
+            x, y, z = self.__upsample_attractor_field(factor=int(upsample_factor), order=1,
+                                                      **{'field_type': field_type, 'attractor_id': attractor_id})
+        else:
+            x, y = self.c_grid
+            z = self.attractor_field(field_type, attractor_id)
+        z = z[:-1, :-1]
+        levels = MaxNLocator(nbins=15).tick_values(z.min(), z.max())
+        ax.contourf(x[:-1, :-1] + dx/2.,
+                    y[:-1, :-1] + dy/2., z, levels=levels,
+                    cmap=cmap)
+        for attr in self.attractors.itervalues():
+            ax.scatter(*attr.position, s=10, c='k', edgecolors='w', alpha=0.9)
+        self._format_plot(ax)
+        return ax
+
+    def plot_individual_trajectory(self, individual=None, show_attractor_field=True, field_type='Sensory',
+                                   attractor_id=None, upsample_factor=1, ax=None, **kwargs):
+        if ax is None:
+            fig, ax = plt.subplots()
+        ax.cla()
+        if show_attractor_field:
+            ax = self.plot_attractor_field(field_type, attractor_id, upsample_factor, ax, **kwargs)
+
+        for ind in self.individuals:
+            if len(ind.trajectory) == 1:
+                ax.scatter(*ind.position, s=15, marker='s', c='r', edgecolors='w', alpha=0.9)
+            else:
+                points = ind.trajectory.transpose().reshape(-1, 1, 2)
+                lines = vTrajectory(points)
+                lines.text.set_fontsize(9)
+                ax.scatter(*lines.get_segments()[-1][-1])
+                ax.add_collection(lines)
+
+        self._format_plot(ax)
+
+    def _format_plot(self, ax):
+        ax.set(xlim=[self.origin[0], self.max_point[0]], ylim=[self.origin[1], self.max_point[1]], title="Environment")
+
+    def __upsample_attractor_field(self, factor=5, order=1, **kwargs):
+        x = zoom(self.c_grid[0], factor, order=order)
+        y = zoom(self.c_grid[1], factor, order=order)
+        z = zoom(self.attractor_field(**kwargs), factor, order=order)
+        return x, y, z
+
     @property
     def positions(self):
         return []
@@ -125,8 +169,8 @@ class Attractor(object):
         self.field_type = 'Sensory'
 
     @property
-    def decay_rate(self):
-        return self.environment.decay_rate
+    def field_permeability(self):
+        return self.environment.field_permeability
 
 
 class Individual(object):
@@ -261,12 +305,12 @@ class ScalarField(object):
 
 
 class ExponentialDecayScalarField(ScalarField):
-    def __init__(self, field_type, c_grid, decay_rate=1., *args, **kwargs):
+    def __init__(self, field_type, c_grid, field_permeability=1., *args, **kwargs):
         super(ExponentialDecayScalarField, self).__init__(field_type, c_grid, *args, **kwargs)
-        self.decay_rate = decay_rate
+        self.field_permeability = field_permeability
 
     def function(self, location=(0, 0), strength=1):
         p_grid = cart2pol(self.c_grid, location)
-        return strength * np.exp(-p_grid[0] * self.decay_rate)
+        return strength * np.exp(-p_grid[0] * self.field_permeability)
 
 

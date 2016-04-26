@@ -1,6 +1,4 @@
-# -*- coding: utf-8 -*-
-"""
-Created on Thu Dec 31 10:15:59 2015
-
-@author: brian
-"""
+__all__ =['individuals', 'network', 'world']
+from individuals import *
+from network import *
+from world import *

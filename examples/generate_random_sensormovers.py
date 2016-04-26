@@ -17,7 +17,6 @@ from pyBrainNetSim.models.individuals import SensorMover
 from pyBrainNetSim.drawing.viewers import vTrajectory
 from pyBrainNetSim.simulation.simnetwork import HebbianNetworkBasic
 
-
 # Method 1: Simple, using default values/distributions
 smpd1 = SensorMoverPropertyDistribution()
 G1 = smpd1.create_digraph()  # creates a networkx DiGraph

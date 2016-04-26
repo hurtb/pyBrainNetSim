@@ -4,3 +4,5 @@ networkx
 matplotlib
 scipy
 mpld3
+jupyter
+virtualenvwrapper
