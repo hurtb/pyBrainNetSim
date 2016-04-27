@@ -1,0 +1,59 @@
+# -*- coding: utf-8 -*-
+"""
+Created on Sat Apr 09 14:48:56 2016
+
+@author: brian
+"""
+
+import sys
+sys.path.append('../../')
+import numpy as np
+from pyBrainNetSim.generators.random import SensorMoverPropertyDistribution, \
+ SensoryPropertyDistribution, InternalPropertyDistribution, \
+ WeightPropertyDistribution, MotorPropertyDistribution
+from pyBrainNetSim.models.network import NeuralNetData
+from pyBrainNetSim.models.world import Environment, Individual, Attractor
+from pyBrainNetSim.models.individuals import SensorMover
+from pyBrainNetSim.drawing.viewers import vTrajectory
+from pyBrainNetSim.simulation.evolution import SensorMoverPopulation
+from scipy.stats import binom
+import matplotlib.pyplot as plt
+import pandas as pd
+
+# Method 2: Explicit use of distributions
+ipd = InternalPropertyDistribution(**{"number_neurons": 4, 
+                                      'energy_value': 2.,
+                                      'threshold': 1.,
+                                      'spontaneity': 1.})
+spd = SensoryPropertyDistribution(**{'energy_value': 2, 'spontaneity': 1., 'threshold': 1.})
+mpd = MotorPropertyDistribution(**{'energy_value': 2})
+wpd = WeightPropertyDistribution()
+smpd = SensorMoverPropertyDistribution(ipd, spd, mpd, wpd)
+G = smpd.create_digraph()
+
+
+# Create environment
+scale , x0sm, y0sm, x0att, y0att =10., .5, .5, .1, .2
+w1 = Environment(max_point = scale * np.array([1.,1.]))
+a0 = Attractor(environment=w1, position=(scale * x0att, scale * y0att), strength=10.)
+
+smp = SensorMoverPopulation(w1, smpd, initial_population_size=1)
+smp.sim_time_steps(max_iter=10)
+traj = smp.trajectory
+te = smp.network_attr('total_energy')
+
+sm1 = smp.individuals['G0_I0']
+sm1sd = sm1.internal.simdata
+sm1n1 = smp.individuals['G0_I0'].internal.simdata[-1]   
+print "SIGNAL"
+print pd.DataFrame(sm1sd.neuron_ts('signal'))
+print "ENERGY"
+print pd.DataFrame(sm1sd.neuron_ts('energy_value'))
+print "DEAD_VECT"
+print pd.DataFrame(sm1sd.node_group_properties('excitatory_to_inhibitory_ratio'))
+#print "THRESHOLD"
+#print pd.DataFrame(sm1sd.neuron_ts('threshold'))
+#print "SPONT_VECT"
+#print pd.DataFrame(sm1sd.node_group_properties('spont_vector'))[sorted(sm1n1.nodes())]
+#smp.hist_population_attr_at_time('energy_value', 3, stacked=True)
+#smp.plot_efficiency()
