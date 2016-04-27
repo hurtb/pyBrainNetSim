@@ -15,7 +15,7 @@ class NeuralNetData(nx.DiGraph):
     graph with added features for a real temporal neural network
     
     """
-    def __init__(self, network, time=None, inactive_node=None, pre_fire=None, *args, **kwargs):
+    def __init__(self, network=None, time=None, inactive_node=None, pre_fire=None, *args, **kwargs):
         super(NeuralNetData, self).__init__(network, *args)
         self.t = time
         self.inactive_nodes = self.set_default(inactive_node)
@@ -53,6 +53,50 @@ class NeuralNetData(nx.DiGraph):
         if isinstance(node_class, str):
             nodes = [n_id for n_id in nodes if self.node[n_id]['node_class'] == node_class]
         return nodes
+
+    # def draw_networkx(self, ax=None):
+    #     if ax is None:
+    #         fig, ax = plt.subplots()
+    #     for node_class in RENDER_NODE_PROPS.iterkeys():
+    #         if node_class == 'Default':
+    #             continue
+    #         node_pos, node_colors, node_shape, node_size, edge_width = self._get_node_plot_props(node_class)
+    #         subgraph = self.subgraph(self.nodes(node_class)).copy()
+    #         nx.draw_networkx_nodes(subgraph, node_pos, node_color=node_colors,
+    #                                node_shape=node_shape, node_size=node_size, ax=ax)
+    #
+    #     node_pos, node_colors, node_shape, node_size, edge_width = self._get_node_plot_props()
+    #     nx.draw_networkx_edges(self, node_pos, width=edge_width, alpha=0.2)
+    #     return ax
+    #
+    # def _get_node_plot_props(self, node_class=None):
+    #
+    #     cm = plt.get_cmap('RdYlGn')  # Shade from red (inhibitory) to green (excitatory)
+    #     nodes = self.nodes(node_class)
+    #     adj_matrix = nx.adjacency_matrix(self)
+    #
+    #     node_pos = {n_id: self.node[n_id]['pos'] for n_id in nodes}
+    #     edge_width = np.array([d['weight'] for (u, v, d) in self.edges(data=True) if u in nodes])
+    #
+    #     if node_class is not None:
+    #         min_ns, max_ns = RENDER_NODE_PROPS[node_class]['min_node_size'], RENDER_NODE_PROPS[node_class]['max_node_size']
+    #         node_colors = np.array([-float(self.node[n_id]['energy_value']) if self.node[n_id]['node_type'] == 'I'
+    #                                 else float(self.node[n_id]['energy_value']) for n_id in nodes])
+    #         for i, n in enumerate(node_colors):
+    #             node_colors[i] = n / node_colors.max() if n > 0. else n / np.abs(node_colors.min())
+    #         node_colors = cm((node_colors +1.) * 256. / 2.)  # normalize to 0-256 and get colors
+    #         node_shape = RENDER_NODE_PROPS[node_class]['shape']
+    #         node_size = np.array([np.maximum(adj_matrix[i].sum(), .01) for i, n_id in enumerate(self.nodes())
+    #                               if self.node[n_id]['node_class'] == node_class])  # proportional to the number of connections
+    #     else:
+    #         node_colors = np.array([self.node[n_id]['energy_value'] for n_id in nodes])
+    #         node_colors = cm(256. * (0.5 + node_colors / (2 * node_colors.max())))  # normalize to 0-256 and get colors
+    #         node_shape, node_size = RENDER_NODE_PROPS['Default']['shape'], adj_matrix.sum(axis=1)
+    #         min_ns, max_ns = RENDER_NODE_PROPS['Default']['min_node_size'], RENDER_NODE_PROPS['Default']['max_node_size']
+    #
+    #     node_size =  min_ns + (max_ns - min_ns) * (node_size - node_size.min()) / (node_size.max() - node_size.min() )\
+    #         if node_size.max() > node_size.min() else max_ns * np.ones_like(node_size)
+    #     return node_pos, node_colors, node_shape, node_size, edge_width
 
     @property
     def synapses(self):

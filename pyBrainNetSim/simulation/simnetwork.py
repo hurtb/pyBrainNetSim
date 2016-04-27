@@ -12,6 +12,7 @@ Created on Mon Dec 28 09:07:44 2015
 from pyBrainNetSim.models.network import *
 from scipy.stats import uniform
 
+
 class SimNetBase(object):
     """
 
@@ -24,6 +25,7 @@ class SimNetBase(object):
                                                prescribed=prescribed)
         self.threshold = threshold
         self.is_initialized = False
+        self.initiate_simulation()
         
     def simulate(self, **kwargs):
         """ Simulation mode of the network."""

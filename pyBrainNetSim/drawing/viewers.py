@@ -8,9 +8,14 @@ import numpy as np
 from matplotlib import pyplot as plt
 from matplotlib.collections import LineCollection
 from matplotlib.colors import LinearSegmentedColormap
-
+import networkx as nx
 import matplotlib.transforms as mtransforms
 import matplotlib.text as mtext
+
+RENDER_NODE_PROPS = {'Internal': {'shape': 'o', 'min_node_size': 50., 'max_node_size': 200.},
+                     'Motor': {'shape': 'h', 'min_node_size': 100., 'max_node_size': 300.},
+                     'Sensory': {'shape': 's', 'min_node_size': 100., 'max_node_size': 300.},
+                     'Default': {'shape': 'o', 'min_node_size': 50., 'max_node_size': 300.}}
 
 
 class vTrajectory(LineCollection):
@@ -49,3 +54,49 @@ class vTrajectory(LineCollection):
         # draw my label at the end of the line with 2 pixel offset
         super(vTrajectory, self).draw(renderer)
         self.text.draw(renderer)
+
+
+def draw_networkx(G, ax=None):
+    if ax is None:
+        fig, ax = plt.subplots()
+    for node_class in RENDER_NODE_PROPS.iterkeys():
+        if node_class == 'Default':
+            continue
+        node_pos, node_colors, node_shape, node_size, edge_width = _get_node_plot_props(G, node_class)
+        subgraph = G.subgraph(G.nodes(node_class)).copy()
+        nx.draw_networkx_nodes(subgraph, node_pos, node_color=node_colors,
+                               node_shape=node_shape, node_size=node_size, ax=ax)
+
+    node_pos, node_colors, node_shape, node_size, edge_width = _get_node_plot_props(G)
+    nx.draw_networkx_edges(G, node_pos, width=edge_width, alpha=0.2)
+    return ax
+
+
+def _get_node_plot_props(G, node_class=None):
+    cm = plt.get_cmap('RdYlGn')  # Shade from red (inhibitory) to green (excitatory)
+    nodes = G.nodes(node_class)
+    adj_matrix = nx.adjacency_matrix(G)
+
+    node_pos = {n_id: G.node[n_id]['pos'] for n_id in nodes}
+    edge_width = np.array([d['weight'] for (u, v, d) in G.edges(data=True) if u in nodes])
+
+    if node_class is not None:
+        min_ns, max_ns = RENDER_NODE_PROPS[node_class]['min_node_size'], RENDER_NODE_PROPS[node_class]['max_node_size']
+        node_colors = np.array([-float(G.node[n_id]['energy_value']) if G.node[n_id]['node_type'] == 'I'
+                                else float(G.node[n_id]['energy_value']) for n_id in nodes])
+        for i, n in enumerate(node_colors):
+            node_colors[i] = n / node_colors.max() if n > 0. else n / np.abs(node_colors.min())
+        node_colors = cm((node_colors + 1.) * 256. / 2.)  # normalize to 0-256 and get colors
+        node_shape = RENDER_NODE_PROPS[node_class]['shape']
+        node_size = np.array([np.maximum(adj_matrix[i].sum(), .01) for i, n_id in enumerate(G.nodes())
+                              if
+                              G.node[n_id]['node_class'] == node_class])  # proportional to the number of connections
+    else:
+        node_colors = np.array([G.node[n_id]['energy_value'] for n_id in nodes])
+        node_colors = cm(256. * (0.5 + node_colors / (2 * node_colors.max())))  # normalize to 0-256 and get colors
+        node_shape, node_size = RENDER_NODE_PROPS['Default']['shape'], adj_matrix.sum(axis=1)
+        min_ns, max_ns = RENDER_NODE_PROPS['Default']['min_node_size'], RENDER_NODE_PROPS['Default']['max_node_size']
+
+    node_size = min_ns + (max_ns - min_ns) * (node_size - node_size.min()) / (node_size.max() - node_size.min()) \
+        if node_size.max() > node_size.min() else max_ns * np.ones_like(node_size)
+    return node_pos, node_colors, node_shape, node_size, edge_width

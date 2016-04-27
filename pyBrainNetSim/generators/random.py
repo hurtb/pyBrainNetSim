@@ -124,7 +124,7 @@ class MotorPropertyDistribution(PropertyDistribution):
     def get_positions(self, number_units):
         pos = []
         for i in range(number_units):
-            pos.append([0., i])
+            pos.append([i+1., 0.])
         return np.array(pos)
 
 
@@ -134,7 +134,7 @@ class SensoryPropertyDistribution(PropertyDistribution):
         self.sensor_direction = [(1., 0.), (-1., 0.), (0., 1.), (0., -1.)]
 
         self.node_class = SENSORY_NODE_CLASS
-        self. node_type = SENSORY_NODE_TYPE
+        self.node_type = SENSORY_NODE_TYPE
         self.energy_value = SENSORY_ENERGY
         self.energy_consumption = SENSORY_ENERGY_CONSUMPTION
         self.energy_dynamics = SENSORY_ENERGY_DYNAMICS
@@ -167,7 +167,7 @@ class SensoryPropertyDistribution(PropertyDistribution):
     def get_positions(self, number_of_neurons):
         pos = []
         for i in range(number_of_neurons):
-            pos.append([0., i])
+            pos.append([0., i + 1.])
         return np.array(pos)
 
 
