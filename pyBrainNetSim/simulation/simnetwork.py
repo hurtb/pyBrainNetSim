@@ -8,8 +8,12 @@ Created on Mon Dec 28 09:07:44 2015
 @author: brian
 """
 
-
+import numpy as np
+from scipy.spatial import ConvexHull
+import matplotlib.pyplot as plt
+import matplotlib.patches as patches
 from pyBrainNetSim.models.network import *
+from pyBrainNetSim.drawing.viewers import draw_networkx
 from scipy.stats import uniform
 
 
@@ -25,17 +29,16 @@ class SimNetBase(object):
                                                prescribed=prescribed)
         self.threshold = threshold
         self.is_initialized = False
-        self.initiate_simulation()
         
-    def simulate(self, **kwargs):
+    def simulate(self, max_iter=5, **kwargs):
         """ Simulation mode of the network."""
         if not self.is_initialized:  # initialize and setup simulation parameters
-            self.initiate_simulation(**kwargs)
+            self.initiate_simulation(max_iter, dt=1, **kwargs)
         while self.t < self.T and not self.simdata[-1].is_dead:  # simulation loop
             self.evolve_time_step()      
 
     def initiate_simulation(self, max_iter=5, dt=1): # setup parameters
-        self.t, self.dt, self.N = 0, dt, max_iter # global time, dt, max iter
+        self.t, self.dt, self.n, self.N = 0, dt, 0, max_iter # global time, dt, max iter
         self.T = self.N * self.dt
         self.simdata = NeuralNetSimData()
         self.simdata.append(NeuralNetData(self.initial_net.copy()))
@@ -57,18 +60,19 @@ class SimNetBase(object):
         self.add_spontaneous(nd)  # add spontaneous firing
         self.find_inactive(nd)  # get potential post-synaptic nodes
         self.integrate_action_potentials(nd)  # integrate action potentials
-        self.propigate_AP(nd)  # Combine propagating and spontaneous action potentials
+        self.propagate_action_potential(nd)  # Combine propagating and spontaneous action potentials
         nd.update_properties()  # update data structures
-        self.synapse_plasticity(nd)  # Plasticity
-        self.migration(nd)  # Migrate
-        self.birth_death(nd)  # Neuron Birth
-
         if self.simdata[-1].is_dead:
             return
         self.simdata.append(NeuralNetData(self.simdata[-1].copy(), time=self.t))
+        nd = self.simdata[-1]
+        self.synapse_plasticity(nd)  # Plasticity
+        self.migration(nd)  # Migrate
+        self.birth_death(nd)  # Neuron Birth
         self.simdata[-1].dead_nodes = self.simdata[-2].dead_nodes
         self.simdata[-1].presyn_nodes = self.simdata[-2].postsyn_nodes
         self.t += self.dt  # step forward in time
+        self.n += 1
 
     def add_energy(self, amount):
         amount_per_neuron = np.floor(float(amount) / self.simdata[-1].number_of_nodes())
@@ -83,8 +87,8 @@ class SimNetBase(object):
         pass
     
     def add_spontaneous(self, ng):
-        """Fxn to setup spontaneuos firing.
-        :param ng:
+        """Fxn to setup spontaneous firing.
+        :param NeuralNetData ng: pass the dat
         """
         pass
         
@@ -98,8 +102,8 @@ class SimNetBase(object):
         """Integration of action potentials"""
         pass
 
-    def propigate_AP(self, ng):
-        """ Propagate AP from pre to post given the network's thresholds."""
+    def propagate_action_potential(self, ng):
+        """ Propagate action potential from pre to post given the network's thresholds."""
         pass
         
     def synapse_plasticity(self, ng, *args, **kwargs):
@@ -113,9 +117,42 @@ class SimNetBase(object):
     def birth_death(self, ng, *args, **kwargs):
         """Add/subtract neurons."""        
         pass
-    
 
-class SimNetBasic(SimNetBase):
+    def draw_networkx(self, t=None, axs=None):
+        """Draw networkx graphs for time points indicated"""
+        max_cols, max_axs, color, alpha = 5, 20, '#D9F2FA', 0.5
+        if t is None or not isinstance(t, [int, float, list, tuple, np.ndarray]):
+            t = range(self.n + 1) if t is None or isinstance(t, [int, float]) else t  # get all points
+        else:
+            t = [t] if isinstance(t, [int, float]) else t  # get all points
+        num_ax = len(t)
+        if axs is None or num_ax != len(axs):
+            rows = int(np.floor(num_ax / max_cols)) + 1
+            cols = num_ax if num_ax <= max_cols else max_cols
+            axs = [plt.subplot2grid((rows, cols), (i/cols, i % cols)) for i in range(num_ax)]
+
+        for i, ax in enumerate(axs):
+            # i_subg = self.simdata[-1].subgraph(self.simdata[-1].nodes('Internal'))
+            # i_points = np.array([p for p in nx.get_node_attributes(i_subg, 'pos').itervalues()])
+            # i_hull = ConvexHull(i_points)
+            #
+            # m_subg = self.simdata[-1].subgraph(self.simdata[-1].nodes('Motor'))
+            # s_subg = self.simdata[-1].subgraph(self.simdata[-1].nodes('Sensory'))
+            #
+
+            axs[i] = draw_networkx(self.simdata[i], ax=ax)
+            axs[i].axis('square')
+            axs[i].set(xticklabels=[], yticklabels=[])
+            # axs[i].add_patch(patches.Polygon([i_points[k] for k in i_hull.vertices], color=color, alpha=alpha))
+            # for m_id, attr in m_subg.node.iteritems():
+            #     axs[i].arrow(attr['pos'][0], attr['pos'][1], attr['force_direction'][0]/2, attr['force_direction'][1]/2,
+            #                  head_width=0.05, head_length=0.1, fc='k', ec='k')
+
+        plt.tight_layout(pad=0.05)
+        return axs
+
+
+class SimNet(SimNetBase):
     def add_driven(self, ng, driven_nodes=None):
         """Set pre-synaptic driving neurons."""
         ng.driven_neurons = []  # use this in external fxn/class to set
@@ -125,7 +162,6 @@ class SimNetBasic(SimNetBase):
         # ng.spont_nodes = ng.vector_to_nodeIDs(self.generate_spontaneous(ng))
         ng.spont_signal = self.generate_spontaneous(ng)
 
-        
     def find_inactive(self, ng):
         """Retrieves a list of neurons firing within the last 'inactive_period' for each neuron."""
         inact = []
@@ -143,30 +179,18 @@ class SimNetBasic(SimNetBase):
         """Integration of action potentials"""
         ng.postsyn_signal = np.multiply(ng.synapses.T, ng.presyn_vector).T.sum(axis=0).A[0]
 
-    def propigate_AP(self, ng):
-        """Propigate AP from pre to post given the network's thresholds."""
+    def propagate_action_potential(self, ng):
+        """Propagate AP from pre to post given the network's thresholds."""
         thresh = nx.get_node_attributes(ng, 'threshold').values()
         ng.prop_vector = (ng.postsyn_signal + ng.spont_signal + ng.driven_vector > thresh).astype(float)
         AP_vector = np.multiply(ng.prop_vector, ng.active_vector)
         AP_vector = np.multiply(AP_vector, ng.alive_vector)
         ng.postsyn_nodes = ng.vector_to_nodeIDs(AP_vector)
 
-    def generate_spontaneous_thresh(self, ng):
-        """
-        Generate spontaneous firing. Uses a basic random number generator with
-        thresholding. FUTURE: add random "voltage" to the presynaptic inputs.
-        """
-        out = (np.random.rand(len(ng.nodes())) < nx.get_node_attributes(ng, 'threshold').values()).astype(float)
-        if ng.active_vector is None:
-            return np.where(out == 1)[0]
-        out[[ng.nID_to_nIx[n_id] for n_id in ng.dead_nodes]] = 0.
-        out = np.multiply(out, ng.active_vector)
-        return out  # vector of 0|1 ordered by .nodes()
-
     def generate_spontaneous(self, ng):
         """
-        Generate spontaneous firing. Uses a basic random number generator with
-        thresholding. FUTURE: add random "voltage" to the presynaptic inputs.
+        Generate spontaneous firing. Outputs a voltage based on the spontaneity (0-1, like a percentage) and the
+        threshold number. Spontaneity=1
         """
         out = []
         for n_id in ng.nodes():
@@ -177,18 +201,27 @@ class SimNetBasic(SimNetBase):
         out[[ng.nID_to_nIx[n_id] for n_id in ng.inactive_nodes]] = 0.
         out[[ng.nID_to_nIx[n_id] for n_id in ng.dead_nodes]] = 0.
         out = np.multiply(out, ng.active_vector)
-        return out  # vector of 0|1 ordered by .nodes()
+        return out  # vector of numbers ordered by .nodes()
 
 
-class HebbianNetworkBasic(SimNetBasic):
+class HebbianNetworkBasic(SimNet):
+    def __init__(self, t0_network, initial_fire='rand', threshold=0.5,
+                 initial_N=None, prescribed=None, pos_synapse_growth=0.1, neg_synapse_growth=-0.05, *args, **kwargs):
+        super(HebbianNetworkBasic, self).__init__(t0_network, initial_fire='rand', threshold=0.5,
+                 initial_N=None, prescribed=None, *args, **kwargs)
+        self.pos_synapse_growth = pos_synapse_growth
+        self.neg_synapse_growth = neg_synapse_growth
     def synapse_plasticity(self, ng, *args, **kwargs):
-        """Basic hebbian learning rule."""
-        node = ng.nodes()
-        eta_pos = 0.1
-        eta_neg = -0.05
-        x = np.matrix([nx.get_node_attributes(ng, 'value')[nID] for nID in ng.nodes()])
-        dW = eta_pos * np.multiply(x.T * x, ng.synapses > 0)
-        Wn = ng.synapses + dW
-        vals = dict(((node[i],node[j]), Wn[i, j]) for i in range(Wn.shape[1]) for j in range(Wn.shape[0])
-                    if (Wn[i, j]> 0. and i != j))
+        """Basic Hebbian learning rule."""
+        nodes = ng.nodes()
+        eta_pos = self.pos_synapse_growth
+        eta_neg = self.neg_synapse_growth
+        x = np.matrix([nx.get_node_attributes(ng, 'value')[nID] for nID in nodes])
+        xn = (x == 0).astype(float)  # nodes not firing; matrix xn.T * x represents nodes not firing
+        dW = eta_pos * np.multiply(x.T * x, ng.abs_synapses > 0) \
+             + eta_neg * np.multiply(xn.T * xn, ng.abs_synapses > 0)  # positive + negative reinforcement
+        Wn = ng.abs_synapses + dW
+        np.fill_diagonal(Wn, 0.)  # reinforce no auto-synapsing
+        vals = dict(((nodes[i], nodes[j]), Wn[i, j]) for i in range(Wn.shape[1]) for j in range(Wn.shape[0])
+                    if (Wn[i, j] > 0. and i != j))
         nx.set_edge_attributes(ng, 'weight', vals)

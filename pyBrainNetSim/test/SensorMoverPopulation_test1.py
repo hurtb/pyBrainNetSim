@@ -37,20 +37,24 @@ scale , x0sm, y0sm, x0att, y0att =10., .5, .5, .1, .2
 w1 = Environment(max_point = scale * np.array([1.,1.]))
 a0 = Attractor(environment=w1, position=(scale * x0att, scale * y0att), strength=10.)
 
-smp = SensorMoverPopulation(w1, smpd, initial_population_size=1)
-smp.sim_time_steps(max_iter=10)
+smp = SensorMoverPopulation(w1, smpd, initial_population_size=9)
+smp.sim_time_steps(max_iter=7)
 traj = smp.trajectory
 te = smp.network_attr('total_energy')
 
 sm1 = smp.individuals['G0_I0']
-sm1sd = sm1.internal.simdata
-sm1n1 = smp.individuals['G0_I0'].internal.simdata[-1]   
-print "SIGNAL"
-print pd.DataFrame(sm1sd.neuron_ts('signal'))
-print "ENERGY"
-print pd.DataFrame(sm1sd.neuron_ts('energy_value'))
-print "DEAD_VECT"
-print pd.DataFrame(sm1sd.node_group_properties('excitatory_to_inhibitory_ratio'))
+#print sm1.efficiency()
+smp.draw_top_networkx()
+print "IS DEAD: %s" % sm1.is_dead
+print smp.individual_efficiency()
+#sm1sd = sm1.internal.simdata
+#sm1n1 = smp.individuals['G0_I0'].internal.simdata[-1]   
+#print "SIGNAL"
+#print pd.DataFrame(sm1sd.neuron_ts('signal'))
+#print "ENERGY"
+#print pd.DataFrame(sm1sd.neuron_ts('energy_value'))
+#print "DEAD_VECT"
+#print pd.DataFrame(sm1sd.node_group_properties('excitatory_to_inhibitory_ratio'))
 #print "THRESHOLD"
 #print pd.DataFrame(sm1sd.neuron_ts('threshold'))
 #print "SPONT_VECT"

@@ -54,6 +54,12 @@ class PropertyDistribution(object):
         i_pos = np.vstack([x.ravel(), y.ravel()]).T
         return i_pos
 
+    def __repr__(self):
+        str = ""
+        for nm, attr in self.__dict__.iteritems():
+            str += "%s: \t%s\n" % (nm, attr)
+        return str
+
 
 class InternalPropertyDistribution(PropertyDistribution):
     def __init__(self, *args, **kwargs):
@@ -266,9 +272,8 @@ class SensorMoverPropertyDistribution(PropertyDistribution):
         ss = self.sensors.sample()
         ms = self.motor.sample()
         nodes = ins + ss + ms
-        weights = self.weights.sample_edge_weights(list(chain.from_iterable([[n[0] for n in ins],
-                                                                            [n[0] for n in ss],
-                                                                            [n[0] for n in ms]])))
+        weights = self.weights.sample_edge_weights(
+            list(chain.from_iterable([[n[0] for n in ins],[n[0] for n in ss], [n[0] for n in ms]])))
         return nodes, weights
 
     def create_digraph(self, *args, **kwargs):
@@ -277,68 +282,3 @@ class SensorMoverPropertyDistribution(PropertyDistribution):
         G.add_nodes_from(nodes)
         G.add_weighted_edges_from(weights)
         return G
-
-# TODO: DEPRECIATE BELOW
-#
-# def random_neuron_props(nclass=None, ntype=None, threshold=None, spontaneous=None, energy=None):
-#     """
-#     Generate properties of a random neuron.
-#     :param nclass: None, scipy distribution, int, float, or str. If None, will use default random generator
-#     :param ntype: None, scipy distribution, int, float, or str. If None, will use default random generator
-#     :param threshold: None, scipy distribution, int, or float. If None, will use default random generator
-#     :param spontaneous: None, scipy distribution, int, or float. If None, will use default random generator
-#     :param energy: None, scipy distribution, int, or float. If None, will use default random generator
-#     :return: dict of properties of a random neuron
-#     """
-#
-#     props = BASIC_NEURON
-#
-#     props.update({'node_class': NEURON_CLASSES[__chk_rand(nclass, DEFAULT_NEURON_CLASS)],
-#                   'node_type': NEURON_TYPES[__chk_rand(ntype, DEFAULT_NEURON_TYPE)],
-#                   'threshold': __chk_rand(threshold, DEFAULT_THRESHOLD),
-#                   'spontaneity': __chk_rand(spontaneous, DEFAULT_SPONTANEITY),
-#                   'energy_value': __chk_rand(energy, DEFAULT_ENERGY),
-#                   'energy_consumption': __chk_rand(energy, DEFAULT_ENERGY_CONSUMPTION),
-#                   })
-#
-#     return props
-#
-#
-# def random_internal_neuron_prop(**kwargs):
-#     props = random_neuron_props(nclass=0, **kwargs).copy()
-#     return props
-#
-#
-# def random_sensory_neuron_prop(sensitivity=None, maxv=None, minv=None, midv=None, **kwargs):
-#     props = random_neuron_props(nclass=1, **kwargs).copy()
-#     sens_min = np.maximum(__chk_rand(maxv, SENSORY_MIN), 0.)
-#     sens_max = np.maximum(__chk_rand(minv, SENSORY_MAX), sens_min)
-#     stim_mid = np.maximum(__chk_rand(midv, STIMULI_MID), 0.)
-#     props.update({'stimuli_fxn': StimuliSensitivity.sigmoid,
-#                   'stimuli_sensitivity': __chk_rand(sensitivity, SENSORY_SENSITIVITY),
-#                   'stimuli_max': sens_max,
-#                   'stimuli_min': sens_min,
-#                   'sensory_mid': stim_mid,
-#                   })
-#     return props
-#
-#
-# def random_motor_neuron_prop(**kwargs):
-#     props = random_neuron_props(nclass=2, **kwargs).copy()
-#     return props
-#
-#
-# def sensor_mover_prop(sensor_mover_distribution):
-#     """
-#     Create a random sensor-mover based on the set of various 'PropertyDistributions.
-#     MORE CONVENIENT METHOD TO GENERATE 'sensor_mover' individuals.
-#     :param sensor_mover_distribution: class instance of SensorMoverPropertyDistribution
-#     :return:
-#     """
-#     props = {}
-#     # First create a dictionary of all of the neural properties. Set edges. Return graph
-#     smp = sensor_mover_distribution
-#     for n in range(__chk_rand(smp.internal.number_neurons)):
-#         pass
-#
-#

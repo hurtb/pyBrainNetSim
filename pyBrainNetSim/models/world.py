@@ -12,7 +12,7 @@ from pyBrainNetSim.drawing.viewers import vTrajectory
 from scipy.spatial.distance import euclidean
 from scipy.stats import randint
 from scipy.ndimage import zoom
-from pyBrainNetSim.utils import  cart2pol
+from pyBrainNetSim.utils import cart2pol
 
 
 class Environment(object):
@@ -21,7 +21,7 @@ class Environment(object):
 
         self.d_size, self.origin, self.max_point, self.deltas, self.c_grid = None, None, None, None, None
         self.change_world(origin, max_point, deltas)
-        self._individuals = []
+        self._individuals = {}
         self.attractors = {}
         self.field_permeability = 0.5
         self.fields = {'Sensory': ExponentialDecayScalarField('Sensory', self.c_grid, self.field_permeability)}
@@ -50,7 +50,7 @@ class Environment(object):
 
     def add_individual(self, individual):
         if isinstance(individual, Individual):
-            self._individuals.append(individual)
+            self._individuals.update({individual.ind_id: individual})
         
     def add_attractor(self, attr, field_type):
         """ e.g. food
@@ -120,10 +120,11 @@ class Environment(object):
         if ax is None:
             fig, ax = plt.subplots()
         ax.cla()
+        individual = [individual] if isinstance(individual, str) else individual
         if show_attractor_field:
             ax = self.plot_attractor_field(field_type, attractor_id, upsample_factor, ax, **kwargs)
-
-        for ind in self.individuals:
+        individuals = self.individuals if individual is None else {s_id: self.individuals[s_id] for s_id in individual}
+        for ind_id, ind in individuals.iteritems():
             if len(ind.trajectory) == 1:
                 ax.scatter(*ind.position, s=15, marker='s', c='r', edgecolors='w', alpha=0.9)
             else:
@@ -132,10 +133,11 @@ class Environment(object):
                 lines.text.set_fontsize(9)
                 ax.scatter(*lines.get_segments()[-1][-1])
                 ax.add_collection(lines)
-
         self._format_plot(ax)
+        return ax
 
     def _format_plot(self, ax):
+        ax.set_aspect('equal', adjustable='box')
         ax.set(xlim=[self.origin[0], self.max_point[0]], ylim=[self.origin[1], self.max_point[1]], title="Environment")
 
     def __upsample_attractor_field(self, factor=5, order=1, **kwargs):
@@ -143,6 +145,13 @@ class Environment(object):
         y = zoom(self.c_grid[1], factor, order=order)
         z = zoom(self.attractor_field(**kwargs), factor, order=order)
         return x, y, z
+
+    def generate_position(self, position):
+        if position is None:  # generate random position
+            pos = np.array(randint(low=self.origin[i], high=self.max_point[i]) for i in  range(self.d_size))
+        else:
+            pos = position
+        return  pos
 
     @property
     def positions(self):
@@ -175,12 +184,8 @@ class Attractor(object):
 
 class Individual(object):
     
-    def __init__(self, environment=None, position=None, *args, **kwargs):
-        if isinstance(environment, Environment):
-            environment.add_individual(self)
-            self.d_size = environment.d_size
-        self.environment = environment
-        if position  is None:
+    def __init__(self, environment=None, position=None, ind_id=None, *args, **kwargs):
+        if position is None:
             self._position = np.array([0., 0.])
         elif len(position) == environment.d_size:
             self._position = np.array(position).astype(np.float)
@@ -190,7 +195,16 @@ class Individual(object):
         else:
             self._position = np.array([0., 0.])
 
-        self._trajectory = [self._position.copy()]        
+        self._trajectory = [self._position.copy()]
+        self.ind_id = self._generate_id(ind_id)
+
+        if isinstance(environment, Environment):
+            environment.add_individual(self)
+            self.d_size = environment.d_size
+        self.environment = environment
+
+    def _generate_id(self, id=None):
+        return id
         
     def move(self, vector):
         if len(vector) == self.d_size:

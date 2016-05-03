@@ -2,9 +2,11 @@
 from pyBrainNetSim.generators.random import SensorMoverPropertyDistribution
 from pyBrainNetSim.models.individuals import SensorMover
 from pyBrainNetSim.simulation.simnetwork import HebbianNetworkBasic
+from pyBrainNetSim.drawing.viewers import draw_networkx
 import pandas as pd
 import copy
 import matplotlib.pyplot as plt
+import numpy as np
 
 
 class SensorMoverPopulationBase(object):
@@ -24,11 +26,13 @@ class SensorMoverPopulationBase(object):
         for i in range(self.initial_population_size):
             self.add_individual()
 
-    def add_individual(self):
+    def add_individual(self, position=None):
         network = self.network_type(self.smd_dist.create_digraph())
         env = self.environment if self.share_world else copy.deepcopy(self.environment)
-        sm = SensorMover(env, position=(1, 1), initial_network=network)  # TODO: alter position
-        self.individuals.update({'G0_I%s' % self.n: sm})
+        _id = 'G0_I%s' % self.n
+        sm = SensorMover(env, position=env.generate_position(position), initial_network=network, ind_id=_id)
+        self.individuals.update({sm.ind_id: sm})
+        self.environment.add_individual(sm)
         self.n += 1
 
     def sim_time_step(self):
@@ -56,7 +60,7 @@ class SensorMoverPopulationBase(object):
         return self.__pandas_df_from_series(attr)
 
     def plot_network_attr(self, attr, ax=None, **kwargs):
-        self.network_attr(attr)
+        self.network_attr(attr).plot(ax=ax, **kwargs)
 
     def population_node_attr_at_time(self, attr, t):
         pna = {}
@@ -71,9 +75,51 @@ class SensorMoverPopulationBase(object):
         df = self.population_node_attr_at_time(attr, t)
         df.plot(kind='hist', ax=ax, alpha=0.5, **kwargs)
 
-    def plot_efficiency(self, **kwargs):
+    def individual_efficiency(self, to='Sensory'):
+        """Return the efficiency of the individuals over the iterations"""
+        return pd.DataFrame({sm_id: sm.efficiency(to=to) for sm_id, sm in self.individuals.iteritems()})
+
+    def top_efficiencies(self, top=5, at_time=None):
+        row = -1 if at_time is None else at_time
         df = pd.DataFrame({sm_id: sm.efficiency() for sm_id, sm in self.individuals.iteritems()})
-        df.cumsum().plot(style='o-')
+        sm_ids = df.cumsum().iloc[row].sort_values(ascending=False).index.values.tolist()
+        return sm_ids
+
+    def plot_efficiency(self, to='Sensory', ax=None, **kwargs):
+        df = self.individual_efficiency(to=to)
+        ax = df.cumsum().plot(style='o-', ax=ax)
+        return ax
+
+    def draw_top_networkx(self, top=5, at_time=None, fig=None):
+        """Draw the top individual's internal network by efficiency."""
+        max_cols, max_axs = 5, 20
+        axs = self._get_axes(top, max_cols)
+        sm_ids = self.top_efficiencies(top, at_time)
+        row = -1 if at_time is None else at_time
+        for i, sm_id in enumerate(sm_ids[:top]):
+            axs[i] = draw_networkx(self.individuals[sm_id].internal.simdata[row], ax=axs[i])
+            axs[i].axis('square')
+            axs[i].set(xticklabels=[], yticklabels=[], title="%s\nEfficiency: %.2f" % (sm_id, self.individuals[sm_id].efficiency().cumsum().iloc[-1]))
+        return axs
+
+    def draw_top_trajectories(self, top=5, at_time=None, fig=None):
+        axs = self._get_axes(top, 5)
+        row = -1 if at_time is None else at_time
+        sm_ids = self.top_efficiencies(top, at_time)
+        for i, sm_id in enumerate(sm_ids[:top]):
+            axs[i] = self.environment.plot_individual_trajectory(individual=sm_id, upsample_factor=20, ax=axs[i])
+            # axs[i].axis('equal')
+            axs[i].set(title="%s Trajectory\nEfficiency: %.2f"
+                             % (sm_id, self.individuals[sm_id].efficiency().cumsum().iloc[-1]))
+        return axs
+
+
+    def _get_axes(self, num, max_cols):
+        rows = int(np.floor(num / max_cols)) + 1
+        cols = int(num) if num <= max_cols else max_cols
+        axs = [plt.subplot2grid((rows, cols), (i / cols, i % cols)) for i in range(num)]
+        return axs
+
 
 
 class SensorMoverPopulation(SensorMoverPopulationBase):

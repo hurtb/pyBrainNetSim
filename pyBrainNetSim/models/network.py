@@ -49,54 +49,10 @@ class NeuralNetData(nx.DiGraph):
             self.node[nID].update(**kwargs)
 
     def nodes(self, node_class=None):
-        nodes = super(nx.DiGraph, self).nodes()
+        nodes = super(NeuralNetData, self).nodes()
         if isinstance(node_class, str):
             nodes = [n_id for n_id in nodes if self.node[n_id]['node_class'] == node_class]
         return nodes
-
-    # def draw_networkx(self, ax=None):
-    #     if ax is None:
-    #         fig, ax = plt.subplots()
-    #     for node_class in RENDER_NODE_PROPS.iterkeys():
-    #         if node_class == 'Default':
-    #             continue
-    #         node_pos, node_colors, node_shape, node_size, edge_width = self._get_node_plot_props(node_class)
-    #         subgraph = self.subgraph(self.nodes(node_class)).copy()
-    #         nx.draw_networkx_nodes(subgraph, node_pos, node_color=node_colors,
-    #                                node_shape=node_shape, node_size=node_size, ax=ax)
-    #
-    #     node_pos, node_colors, node_shape, node_size, edge_width = self._get_node_plot_props()
-    #     nx.draw_networkx_edges(self, node_pos, width=edge_width, alpha=0.2)
-    #     return ax
-    #
-    # def _get_node_plot_props(self, node_class=None):
-    #
-    #     cm = plt.get_cmap('RdYlGn')  # Shade from red (inhibitory) to green (excitatory)
-    #     nodes = self.nodes(node_class)
-    #     adj_matrix = nx.adjacency_matrix(self)
-    #
-    #     node_pos = {n_id: self.node[n_id]['pos'] for n_id in nodes}
-    #     edge_width = np.array([d['weight'] for (u, v, d) in self.edges(data=True) if u in nodes])
-    #
-    #     if node_class is not None:
-    #         min_ns, max_ns = RENDER_NODE_PROPS[node_class]['min_node_size'], RENDER_NODE_PROPS[node_class]['max_node_size']
-    #         node_colors = np.array([-float(self.node[n_id]['energy_value']) if self.node[n_id]['node_type'] == 'I'
-    #                                 else float(self.node[n_id]['energy_value']) for n_id in nodes])
-    #         for i, n in enumerate(node_colors):
-    #             node_colors[i] = n / node_colors.max() if n > 0. else n / np.abs(node_colors.min())
-    #         node_colors = cm((node_colors +1.) * 256. / 2.)  # normalize to 0-256 and get colors
-    #         node_shape = RENDER_NODE_PROPS[node_class]['shape']
-    #         node_size = np.array([np.maximum(adj_matrix[i].sum(), .01) for i, n_id in enumerate(self.nodes())
-    #                               if self.node[n_id]['node_class'] == node_class])  # proportional to the number of connections
-    #     else:
-    #         node_colors = np.array([self.node[n_id]['energy_value'] for n_id in nodes])
-    #         node_colors = cm(256. * (0.5 + node_colors / (2 * node_colors.max())))  # normalize to 0-256 and get colors
-    #         node_shape, node_size = RENDER_NODE_PROPS['Default']['shape'], adj_matrix.sum(axis=1)
-    #         min_ns, max_ns = RENDER_NODE_PROPS['Default']['min_node_size'], RENDER_NODE_PROPS['Default']['max_node_size']
-    #
-    #     node_size =  min_ns + (max_ns - min_ns) * (node_size - node_size.min()) / (node_size.max() - node_size.min() )\
-    #         if node_size.max() > node_size.min() else max_ns * np.ones_like(node_size)
-    #     return node_pos, node_colors, node_shape, node_size, edge_width
 
     @property
     def synapses(self):
@@ -107,6 +63,10 @@ class NeuralNetData(nx.DiGraph):
         for nID in self.dead_nodes:
             weights[self.nID_to_nIx[nID]] *= 0.
         return weights
+
+    @property
+    def abs_synapses(self):
+        return np.abs(self.synapses)
 
     @property
     def nID_to_nIx(self):
@@ -231,7 +191,7 @@ class NeuralNetSimData(list):
         out = []
         for state in self:
             out.append(getattr(state, node_attribute))
-        if self[-1].number_of_nodes() == len(out) and len(out[0]) > 1:
+        if isinstance(out[0], (list, tuple, np.ndarray)):
             out = pd.DataFrame(out, columns=self[-1].nodes())
         else:
             out = pd.Series(out, index=range(len(self)))

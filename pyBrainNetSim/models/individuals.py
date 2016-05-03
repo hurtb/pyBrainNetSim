@@ -13,7 +13,7 @@ import pandas as pd
 
 
 class SensorMover(Individual):
-    def __init__(self, environment, position=None, initial_network=None, *args, **kwargs):
+    def __init__(self, environment, position=None, initial_network=None, ind_id=None, *args, **kwargs):
         """
         Class used to simulate the how a 'SensorMover' individual operates in the environment it is placed in.
         :param environment:
@@ -23,7 +23,7 @@ class SensorMover(Individual):
         :param kwargs:
         :return:
         """
-        super(SensorMover, self).__init__(environment, position, **kwargs)
+        super(SensorMover, self).__init__(environment, position, ind_id, **kwargs)
         self.internal = initial_network
         self.internal.initiate_simulation()
         self.motor_activations = []
@@ -46,9 +46,9 @@ class SensorMover(Individual):
         self._sensory_gradients.append(self.environment.attractor_gradient_at(self.position, field_type='Sensory'))
         # get sensory field for each sensor at individual's position fire sensory neurons accordingly
         sens_firing = []
-        self.internal.evolve_time_step(driven_nodes=sens_firing)  # evolve 1 internal state's timeperiod
+        self.internal.evolve_time_step(driven_nodes=sens_firing)  # evolve 1 internal state's time-period
         self._evaluate_sensory_signals(self.internal.simdata[-1])
-        self.move(self._motor_actions(self.internal.simdata[-1])) # apply motor output
+        self.move(self._motor_actions(self.internal.simdata[-1]))  # apply motor output
         self.t += 1
         
     def sim_time_steps(self, max_iter=10):
@@ -135,7 +135,8 @@ class SensorMover(Individual):
         sn = self.internal.simdata
         motor_energy = sn.node_group_properties('energy_vector')[sn[-1].nodes(node_class='Motor')]
         motor_energy[motor_energy == 0.] = 1.  # such that no energy exp
-        eff = np.multiply(self.velocity, self.sensory_gradients).sum(axis=1)/motor_energy[1:].sum(axis=1)
+        denominator = motor_energy[1:].sum(axis=1) if self.is_liviing else motor_energy.sum(axis=1)
+        eff = np.multiply(self.velocity, self.sensory_gradients).sum(axis=1)/denominator
         return eff
 
     def plot_efficiency(self, **kwargs):
