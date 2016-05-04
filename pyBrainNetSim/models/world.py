@@ -148,10 +148,10 @@ class Environment(object):
 
     def generate_position(self, position):
         if position is None:  # generate random position
-            pos = np.array(randint(low=self.origin[i], high=self.max_point[i]) for i in  range(self.d_size))
+            pos = np.array([randint(low=self.origin[i], high=self.max_point[i]).rvs() for i in range(self.d_size)])
         else:
             pos = position
-        return  pos
+        return pos
 
     @property
     def positions(self):
