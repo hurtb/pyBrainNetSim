@@ -49,6 +49,6 @@ if __name__ == '__main__':
     d1 = dat[1]
     d2 = dat[2]
 #    print ts.trajectory
-#    print ts.internal.simdata.node_group_properties('presyn_vector')
+#    print ts.internal.simdata.neuron_group_property_ts('presyn_vector')
 #    print dat.neuron_ts(neuronID='S0',prop='energy_value')
-#    print dat.node_group_properties('presyn_vector')[sorted(d0.nodes())]
+#    print dat.neuron_group_property_ts('presyn_vector')[sorted(d0.nodes())]

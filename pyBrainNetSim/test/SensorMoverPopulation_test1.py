@@ -54,10 +54,10 @@ print smp.individual_efficiency()
 #print "ENERGY"
 #print pd.DataFrame(sm1sd.neuron_ts('energy_value'))
 #print "DEAD_VECT"
-#print pd.DataFrame(sm1sd.node_group_properties('excitatory_to_inhibitory_ratio'))
+#print pd.DataFrame(sm1sd.neuron_group_property_ts('excitatory_to_inhibitory_ratio'))
 #print "THRESHOLD"
 #print pd.DataFrame(sm1sd.neuron_ts('threshold'))
 #print "SPONT_VECT"
-#print pd.DataFrame(sm1sd.node_group_properties('spont_vector'))[sorted(sm1n1.nodes())]
+#print pd.DataFrame(sm1sd.neuron_group_property_ts('spont_vector'))[sorted(sm1n1.nodes())]
 #smp.hist_population_attr_at_time('energy_value', 3, stacked=True)
 #smp.plot_efficiency()

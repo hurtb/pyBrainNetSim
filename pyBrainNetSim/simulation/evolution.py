@@ -28,7 +28,8 @@ class SensorMoverPopulationBase(object):
 
     def add_individual(self, position=None):
         network = self.network_type(self.smd_dist.create_digraph())
-        env = self.environment if self.share_world else copy.deepcopy(self.environment)
+        env = self.environment if self.share_world else copy.copy(self.environment)
+        env.rm_individuals()
         _id = 'G0_I%s' % self.n
         sm = SensorMover(env, position=env.generate_position(position), initial_network=network, ind_id=_id)
         self.individuals.update({sm.ind_id: sm})
@@ -42,6 +43,11 @@ class SensorMoverPopulationBase(object):
 
     def sim_time_steps(self, max_iter=10):
         while self.t < max_iter:
+            n = 0
+            for ind in self.individuals.itervalues():
+                n += 1 if ind.is_living else 0
+            trg = ' '.join([ind.ind_id for ind in self.individuals.itervalues() if ind.found_target()])
+            print "t: %d | Number Living: %d | Found Target: %s" % (self.t, n, trg)
             self.sim_time_step()
 
     def __pandas_df_from_series(self, attr):

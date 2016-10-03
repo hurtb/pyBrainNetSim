@@ -95,7 +95,6 @@ class SensorMover(Individual):
 
     def _update_energy(self, ng):
         for nID in ng.nodes():
-            print nID
             ng.node[nID]['energy_value'] = \
                 ng.node[nID]['energy_dynamics'](ng.node[nID]['energy_value'], ng.node[nID]['energy_consumption'])
 
@@ -112,7 +111,7 @@ class SensorMover(Individual):
         return self.internal.simdata[-1].is_dead
 
     @property
-    def is_liviing(self):
+    def is_living(self):
         return not self.is_dead
 
     def found_target(self):
@@ -133,9 +132,9 @@ class SensorMover(Individual):
         :return:
         """
         sn = self.internal.simdata
-        motor_energy = sn.node_group_properties('energy_vector')[sn[-1].nodes(node_class='Motor')]
+        motor_energy = sn.neuron_group_property_ts('energy_vector')[sn[-1].nodes(node_class='Motor')]
         motor_energy[motor_energy == 0.] = 1.  # such that no energy exp
-        denominator = motor_energy[1:].sum(axis=1) if self.is_liviing else motor_energy.sum(axis=1)
+        denominator = motor_energy[1:].sum(axis=1) if self.is_living else motor_energy.sum(axis=1)
         eff = np.multiply(self.velocity, self.sensory_gradients).sum(axis=1)/denominator
         return eff
 

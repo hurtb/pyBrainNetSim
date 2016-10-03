@@ -13,6 +13,7 @@ from scipy.spatial.distance import euclidean
 from scipy.stats import randint
 from scipy.ndimage import zoom
 from pyBrainNetSim.utils import cart2pol
+import pyBrainNetSim.utils as utils
 
 
 class Environment(object):
@@ -51,6 +52,9 @@ class Environment(object):
     def add_individual(self, individual):
         if isinstance(individual, Individual):
             self._individuals.update({individual.ind_id: individual})
+
+    def rm_individuals(self):
+        self._individuals = {}
         
     def add_attractor(self, attr, field_type):
         """ e.g. food
@@ -115,7 +119,7 @@ class Environment(object):
         self._format_plot(ax)
         return ax
 
-    def plot_individual_trajectory(self, individual=None, show_attractor_field=True, field_type='Sensory',
+    def plot_individual_trajectory(self, individual=None, at_time=None, show_attractor_field=True, field_type='Sensory',
                                    attractor_id=None, upsample_factor=1, ax=None, **kwargs):
         if ax is None:
             fig, ax = plt.subplots()
@@ -125,13 +129,16 @@ class Environment(object):
             ax = self.plot_attractor_field(field_type, attractor_id, upsample_factor, ax, **kwargs)
         individuals = self.individuals if individual is None else {s_id: self.individuals[s_id] for s_id in individual}
         for ind_id, ind in individuals.iteritems():
-            if len(ind.trajectory) == 1:
-                ax.scatter(*ind.position, s=15, marker='s', c='r', edgecolors='w', alpha=0.9)
-            else:
-                points = ind.trajectory.transpose().reshape(-1, 1, 2)
+            t = at_time if isinstance(at_time, int) else len(ind.trajectory)
+            trajectory = ind.trajectory[:t]
+            if len(trajectory) == 1:
+                ax.scatter(*trajectory[-1], s=15, marker='s', c='r', edgecolors='w', alpha=0.9)
+            elif t > 0:
+                points = np.array(utils.points_to_segments(trajectory))
                 lines = vTrajectory(points)
                 lines.text.set_fontsize(9)
-                ax.scatter(*lines.get_segments()[-1][-1])
+                # print lines.get_segments()
+                ax.scatter(*trajectory[-1], s=15, marker='s', c='r', edgecolors='w', alpha=0.9)
                 ax.add_collection(lines)
         self._format_plot(ax)
         return ax

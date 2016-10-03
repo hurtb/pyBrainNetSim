@@ -21,11 +21,11 @@ class NeuralNetData(nx.DiGraph):
         self.inactive_nodes = self.set_default(inactive_node)
         self.presyn_nodes = []
         self.postsyn_nodes = []
-        self.postsyn_signal = None
+        self.postsyn_signal = []
         # self.spont_nodes = []
         self.spont_signal = np.zeros(self.number_of_nodes())
         self.driven_nodes = []
-        self.prop_vector = None
+        self.prop_vector = []
         self.dead_nodes = []
 
     @staticmethod
@@ -41,6 +41,8 @@ class NeuralNetData(nx.DiGraph):
             self.node[nID]['energy_value'] = self.node[nID]['energy_dynamics'](self.node[nID]['energy_value'],
                                                                                self.node[nID]['energy_consumption'])
         self.dead_nodes = [nID for nID in self.nodes() if self.node[nID]['energy_value'] <= 0.]
+        for i, nID in enumerate(self.nodes()):
+            self.node[nID]['postsyn_signal'] = self.postsyn_signal[i]
 
     def __update_props(self, nIDs, **kwargs):
         if nIDs is None:
@@ -84,6 +86,9 @@ class NeuralNetData(nx.DiGraph):
     def active_vector(self):        
         return self.nodeIDs_to_vector(self.active_nodes)
 
+    def is_node_active(self, node_id):
+        return True if node_id in self.active_nodes else False
+
     @property
     def inactive_vector(self):
         return self.nodeIDs_to_vector(self.inactive_nodes)
@@ -91,6 +96,9 @@ class NeuralNetData(nx.DiGraph):
     @property
     def presyn_vector(self):
         return self.nodeIDs_to_vector(self.presyn_nodes)
+
+    def is_node_firing(self, node_id):
+        return True if node_id in self.presyn_nodes else False
 
     @property
     def postsyn_vector(self):
@@ -129,9 +137,15 @@ class NeuralNetData(nx.DiGraph):
     def alive_nodes(self):
         return self.vector_to_nodeIDs(self.alive_vector)
 
+    def is_node_alive(self, node_id):
+        return True if node_id in self.alive_nodes else False
+
     @property
     def dead_vector(self):
         return self.nodeIDs_to_vector(self.dead_nodes)
+
+    def is_node_dead(self, node_id):
+        return True if node_id in self.dead_nodes else False
 
     @property
     def is_dead(self):
@@ -151,6 +165,11 @@ class NeuralNetData(nx.DiGraph):
         
     def vector_to_nodeIDs(self, vector):
         return np.array(self.nodes())[vector == 1.].tolist()
+
+    def incoming_nodes(self, to_nid):
+        w = nx.get_edge_attributes(self, 'weight')
+
+        return [f_id for f_id, t_id in w.iterkeys() if t_id == to_nid]
 
     def __repr__(self):
         return "t: %s\nTotal Nodes: %d\nPre: %s\nInactive: %s\nPost: %s" \
@@ -182,7 +201,7 @@ class NeuralNetSimData(list):
     def active(self):
         return pd.DataFrame(self._active)
 
-    def node_group_properties(self, node_attribute):
+    def neuron_group_property_ts(self, node_attribute):
         """
         Return a dataframe with the
         :param node_attribute:
@@ -212,15 +231,24 @@ class NeuralNetSimData(list):
             for node, attr in nn.node.iteritems():
                 if node not in ts:
                     ts.update({node: {}})
-                if prop not in attr:
-                    ts[node].update({i: None})
+                if isinstance(prop, (list, tuple, np.ndarray)):
+                    for pr in prop:
+                        if pr not in ts[node]:
+                            ts[node].update({pr:{}})
+                        if pr not in attr:
+                            ts[node][pr].update({i: None})
+                        else:
+                            ts[node][pr].update({i: attr[pr]})
                 else:
-                    ts[node].update({i: attr[prop]})
+                    if prop not in attr:
+                        ts[node].update({i: None})
+                    else:
+                        ts[node].update({i: attr[prop]})
         out = ts
         if isinstance(neuron_id, (list, tuple, np.ndarray)):
             out = {n_id: ts[n_id] for n_id in neuron_id}
         elif isinstance(neuron_id, str):
-            out = {neuron_id, ts[neuron_id]}
+            out = ts[neuron_id]
         return out
 
     def edge_ts(self, pairs, prop):

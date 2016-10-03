@@ -1,4 +1,5 @@
 import numpy as np
+import scipy as sp
 import networkx as nx
 import types
 from itertools import permutations, chain
@@ -64,7 +65,7 @@ class PropertyDistribution(object):
 class InternalPropertyDistribution(PropertyDistribution):
     def __init__(self, *args, **kwargs):
         self.number_neurons = INTERNAL_NUMBER_OF_NEURONS
-        self.excitatory_to_inhibitory = INTERNAL_EXCIT_TO_INHIB
+        self.excitatory_to_inhibitory = self._chk_rand(INTERNAL_EXCIT_TO_INHIB)
         self.physical_distribution = INTERNAL_PHYSICAL_DISTRIBUTION
         self.node_class = INTERNAL_NODE_CLASS
         self.value = INTERNAL_VALUE
@@ -75,6 +76,7 @@ class InternalPropertyDistribution(PropertyDistribution):
         self.threshold_change_fx = INTERNAL_THRESHOLD_FXN
         self.spontaneity = INTERNAL_SPONTANEITY
         self.inactive_period = INTERNAL_INACTIVE_PERIOD
+        self.postsyn_signal = 0.
 
         self.set_kwargs(**kwargs)
 
@@ -86,8 +88,8 @@ class InternalPropertyDistribution(PropertyDistribution):
         pos = self.get_positions(number_of_neurons, self._chk_rand(self.physical_distribution))
         for nID in range(number_of_neurons):
             prop = {key: self.sample_field(val, key) for key, val in items.iteritems()}
-            prop.update({'node_type': 'E' if self.sample_field(self.excitatory_to_inhibitory) > .5 else 'I',
-                         'pos': pos[nID]})
+            prop.update({'node_type': 'E' if self.sample_field(sp.stats.bernoulli.rvs(self.excitatory_to_inhibitory))
+                                             > .5 else 'I', 'pos': pos[nID]})
             node.append(('I%d' % nID, prop))
         return node
 
@@ -111,6 +113,7 @@ class MotorPropertyDistribution(PropertyDistribution):
         self.spontaneity = MOTOR_SPONTANEITY
         self.inactive_period = MOTOR_INACTIVE_PERIOD
         self.value = MOTOR_VALUE
+        self.postsyn_signal = 0.
 
         self.set_kwargs(**kwargs)
 
@@ -155,6 +158,7 @@ class SensoryPropertyDistribution(PropertyDistribution):
         self.stimuli_fxn = SENSORY_TO_STIMULI_FXN
         self.value = SENSORY_VALUE0
         self.signal = SENSORY_SIGNAL0
+        self.postsyn_signal = 0.
 
         self.set_kwargs(**kwargs)
 
@@ -187,6 +191,10 @@ class WeightPropertyDistribution(PropertyDistribution):
         self.edge_sensor_min_cutoff = EDGE_SENSORY_MIN_CUTOFF
         self.sensory_max_connections = SENSORY_MAX_CONNECTIONS
         self.motor_max_connections = MOTOR_MAX_CONNECTIONS
+        self.sensory_to_internal_max_connections = SENSORY_TO_INTERNAL_MAX_CONNECTIONS
+        self.int_to_motor_max_connections = INTERNAL_TO_SENSORY_MAX_CONNECTIONS
+        self.explicit_connections = None
+
         self.set_kwargs(**kwargs)
 
     def sample_edges(self, node, *args, **kwargs):
@@ -231,24 +239,39 @@ class WeightPropertyDistribution(PropertyDistribution):
         nodes = node
         if isinstance(node, dict):
             nodes = node.keys()
+        internal_nodes = _internal_nodes = [n for n in node if n.startswith('I')]
+        motor_nodes = [n for n in node if n.startswith('M')]
+        sensory_nodes = [n for n in node if n.startswith('S')]
+
+        sensory_to_int_max_connections = int(self._chk_rand(self.sensory_to_internal_max_connections))
+        int_to_motor_max_connections = int(self._chk_rand(self.int_to_motor_max_connections))
+        if len(sensory_nodes) * sensory_to_int_max_connections + len(motor_nodes) * int_to_motor_max_connections \
+                > len(internal_nodes):
+            return {}
         weight = []
+
+        internal_to_motor_nodes = {}
+        np.random.shuffle(_internal_nodes)
+        for mn in motor_nodes:
+            internal_to_motor_nodes.update({mn: _internal_nodes[:int_to_motor_max_connections]})
+            _internal_nodes = _internal_nodes[int_to_motor_max_connections:]
+
+        sensory_to_int_nodes = {}
+
+        for sn in sensory_nodes:
+            sensory_to_int_nodes.update({sn: _internal_nodes[:sensory_to_int_max_connections]})
+            _internal_nodes = _internal_nodes[sensory_to_int_max_connections:]
         for n1, n2 in permutations(nodes, 2):  # get all permutations of nodes (no auto-signaling)
             w = 0.
-            sensor_numbers = {}
-            motor_numbers = {}
             if n1.startswith('I') and n2.startswith('I'):
                 w = self._chk_rand(self.int_to_int)
                 w = w if w > self.edge_internal_min_cutoff else 0.
-            elif n1.startswith('I') and n2.startswith('M'):
-                motor_numbers[n2] = 1 if n2 not in motor_numbers.keys() else motor_numbers[n2]+1
-                if motor_numbers[n2] <= self.motor_max_connections:
-                    w = self._chk_rand(self.int_to_motor)
-                    w = w if w > self.edge_motor_min_cutoff else 0.
-            elif n1.startswith('S') and n2.startswith('I'):
-                sensor_numbers[n1] = 1 if n1 not in sensor_numbers.keys() else sensor_numbers[n1]+1
-                if sensor_numbers[n1] <= self.sensory_max_connections:
-                    w = self._chk_rand(self.sensor_to_int)
-                    w = w if w > self.edge_sensor_min_cutoff else 0.
+            elif n1.startswith('I') and n2.startswith('M') and n1 in internal_to_motor_nodes[n2]:
+                w = self._chk_rand(self.int_to_motor)
+                w = w if w > self.edge_motor_min_cutoff else 0.
+            elif n1.startswith('S') and n2.startswith('I') and n2 in sensory_to_int_nodes[n1]:
+                w = self._chk_rand(self.sensor_to_int)
+                w = w if w > self.edge_sensor_min_cutoff else 0.
             if w > 0.:
                 weight.append((n1, n2, w))
         return weight

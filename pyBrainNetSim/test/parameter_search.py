@@ -11,7 +11,6 @@ sys.path.append('../../')
 from pyBrainNetSim.models.individuals import SensorMover
 from pyBrainNetSim.models.world import Environment, Attractor
 from pyBrainNetSim.solvers.solver import SensorMoverEvolutionarySolver
-from pyBrainNetSim.generators.basic import rand_sensor_mover
 from pyBrainNetSim.generators.random import InternalPropertyDistribution, MotorPropertyDistribution, SensoryPropertyDistribution
 from scipy.stats import norm, binom, randint, poisson, uniform
 
@@ -68,4 +67,4 @@ if __name__ == '__main__':
     d1 = dat[1]
     d2 = dat[2]
     print ts.trajectory
-    print ts.internal.simdata.node_group_properties('presyn_vector')
+    print ts.internal.simdata.neuron_group_property_ts('presyn_vector')

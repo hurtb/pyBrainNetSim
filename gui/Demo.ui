@@ -6,7 +6,7 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>2003</width>
+    <width>2160</width>
     <height>1410</height>
    </rect>
   </property>
@@ -72,8 +72,8 @@
      <widget class="QWidget" name="formLayoutWidget">
       <property name="geometry">
        <rect>
-        <x>950</x>
-        <y>370</y>
+        <x>1180</x>
+        <y>200</y>
         <width>491</width>
         <height>361</height>
        </rect>
@@ -130,7 +130,7 @@
     <rect>
      <x>0</x>
      <y>0</y>
-     <width>2003</width>
+     <width>2160</width>
      <height>38</height>
     </rect>
    </property>

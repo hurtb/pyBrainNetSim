@@ -7,18 +7,30 @@ Created on Sat Feb 13 09:37:35 2016
 import numpy as np
 from matplotlib import pyplot as plt
 import matplotlib.patches as patches
+import matplotlib.colors as colors
 from matplotlib.collections import LineCollection
 from matplotlib.colors import LinearSegmentedColormap
 import matplotlib.transforms as mtransforms
 import matplotlib.text as mtext
 import networkx as nx
 from scipy.spatial import ConvexHull
+import pandas as pd
 import pyBrainNetSim.models.network
+import pyBrainNetSim.drawing.layouts as lyt
+import pyBrainNetSim
+import pyBrainNetSim.utils as utils
 
 RENDER_NODE_PROPS = {'Internal': {'shape': 'o', 'min_node_size': 50., 'max_node_size': 200.},
                      'Motor': {'shape': 'h', 'min_node_size': 100., 'max_node_size': 300.},
                      'Sensory': {'shape': 's', 'min_node_size': 100., 'max_node_size': 300.},
-                     'Default': {'shape': 'o', 'min_node_size': 50., 'max_node_size': 300.}}
+                     'Default': {'shape': 'o', 'min_node_size': 50., 'max_node_size': 300.},
+                     'Firing': {'shape': 'o', 'min_node_size': 50., 'max_node_size': 300.,
+                                'node_face_color': '#D1D66B', 'node_edge_color': '#D1D66B'},
+                     'Active': {'shape': 'o', 'min_node_size': 50., 'max_node_size': 300.,
+                                'node_face_color': '#D1D66B', 'node_edge_color': '#D1D66B'},
+                     'Dead': {'shape': 'o', 'min_node_size': 50., 'max_node_size': 300.,
+                                'node_face_color': '#D1D66B', 'node_edge_color': '#D1D66B'},
+                     }
 
 
 class vTrajectory(LineCollection):
@@ -59,30 +71,41 @@ class vTrajectory(LineCollection):
         self.text.draw(renderer)
 
 
-def draw_networkx(G, ax=None, **kwargs):
-    color, alpha = '#D9F2FA', 0.5
+def draw_networkx(G, layout='grid', ax=None, max_e=None, plot_active=True, active_node_color=None, **kwargs):
+    internal_color, internal_alpha, overall_color, overall_alpha = '#D9F2FA', 0.5, '#DEDEDE', 0.2
     if ax is None:
         fig, ax = plt.subplots()
+    if layout == 'grid':
+        G = lyt.grid_layout(G)
     for node_class in RENDER_NODE_PROPS.iterkeys():
-        if node_class == 'Default':
+        if node_class in ['Default', 'Active', 'Dead', 'Firing']:
             continue
-        node_pos, node_colors, node_shape, node_size, edge_width = _get_node_plot_props(G, node_class)
+        node_pos, node_colors, node_shape, node_size, edge_width = \
+            _get_node_plot_props(G, node_class, max_energy=max_e)
+        # print node_colors
         subgraph = G.subgraph(G.nodes(node_class)).copy()
         nx.draw_networkx_nodes(subgraph, node_pos, node_color=node_colors,
                                node_shape=node_shape, node_size=node_size, ax=ax)
 
-    node_pos, node_colors, node_shape, node_size, edge_width = _get_node_plot_props(G)
+    node_pos, node_colors, node_shape, node_size, edge_width = _get_node_plot_props(G, max_energy=max_e)
     nx.draw_networkx_edges(G, node_pos, width=edge_width, alpha=0.2, ax=ax)
 
+    scale = 1.1
     i_subg = G.subgraph(G.nodes('Internal'))
     m_subg = G.subgraph(G.nodes('Motor'))
     s_subg = G.subgraph(G.nodes('Sensory'))
+    all_points = np.array([p for p in nx.get_node_attributes(G, 'pos').itervalues()])
+    i_hull = ConvexHull(all_points)
+    ax.add_patch(patches.Polygon(scale * np.array([all_points[k] for k in i_hull.vertices]), color=overall_color, alpha=overall_alpha))
     i_points = np.array([p for p in nx.get_node_attributes(i_subg, 'pos').itervalues()])
     i_hull = ConvexHull(i_points)
-    ax.add_patch(patches.Polygon([i_points[k] for k in i_hull.vertices], color=color, alpha=alpha))
+    ax.add_patch(patches.Polygon(scale * np.array([i_points[k] for k in i_hull.vertices]), color=internal_color, alpha=internal_alpha))
+    firing_nc = colors.hex2color(active_node_color) if active_node_color is not None \
+        else list(colors.hex2color(RENDER_NODE_PROPS['Firing']['node_face_color']))
     for m_id, attr in m_subg.node.iteritems():
-        ax.arrow(attr['pos'][0], attr['pos'][1], attr['force_direction'][0] / 2, attr['force_direction'][1] / 2,
-                     head_width=0.05, head_length=0.1, fc='k', ec='k')
+        arr_cl = firing_nc if G.is_node_firing(m_id) else 'k'
+        ax.arrow(attr['pos'][0], attr['pos'][1], attr['force_direction'][0] * 4, attr['force_direction'][1] * 4,
+                     head_width=1, head_length=np.linalg.norm(attr['force_direction'])/2, fc='k', ec=arr_cl)
 
     plt.gca().set(**kwargs)
     return ax
@@ -132,7 +155,9 @@ def pcolormesh_edges(sim_net, at_time=-1, ax=None, **kwargs):
     ax.set_xticklabels(sorted_neuron_names, rotation='vertical')
     ax.set_yticklabels(sorted_neuron_names)
     ax.set_aspect('equal', adjustable='box')
-    plt.gcf().colorbar(p, ax=ax)
+    # cb = ax.images[-1].colorbar
+    # cb.remove()
+    # cb = plt.gcf().colorbar(p, ax=ax)
     return ax
 
 
@@ -166,7 +191,6 @@ def pcolormesh_edge_changes(sim_net, initial_time=0, final_time=-1, ax=None, as_
 
     if as_pct:
         z = 100 * np.divide(final_z - initial_z, initial_z)
-        # print final_z - initial_z
         z = np.ma.masked_where(z == 0, z)
         z = np.ma.masked_where(np.isnan(z), z)
         z_max = 10. * np.ceil(np.abs(z).max()/10.)
@@ -177,16 +201,19 @@ def pcolormesh_edge_changes(sim_net, initial_time=0, final_time=-1, ax=None, as_
         z_min = -np.abs(z).max() if vmin is None else vmin
         z_max = np.abs(z).max() if vmax is None else vmax
     p = ax.pcolormesh(x, y, z, cmap='coolwarm', vmin=z_min, vmax=z_max)
+    plt.gca()
     ax.set(title=my_title, xlabel="Post-synaptic Neurons", ylabel="Pre-synaptic Neurons",
            xlim=(x.min(), x.max()), ylim=(y.min(), y.max()))
     ax.set_title(my_title, {'fontsize': 10})
-    plt.xticks(range(initial_net.number_of_nodes()), sorted_neuron_names, rotation='vertical', ha='center')
-    plt.yticks(range(initial_net.number_of_nodes()), sorted_neuron_names, va='center')
+    ax.set_xticks(range(len(initial_net.nodes())))
+    ax.set_yticks(range(len(initial_net.nodes())))
+    ax.set_xticklabels(sorted_neuron_names, rotation='vertical', ha='center')
+    ax.set_yticklabels(sorted_neuron_names, va='center')
     ax.set_aspect('equal', adjustable='box')
-    if as_pct:
-        plt.gcf().colorbar(p, ax=ax, format='%d%%')
-    else:
-        plt.gcf().colorbar(p, ax=ax)
+    # if as_pct:
+    #     plt.gcf().colorbar(p, ax=ax, format='%d%%')
+    # else:
+    #     plt.gcf().colorbar(p, ax=ax)
     return ax
 
 
@@ -215,31 +242,133 @@ def _get_net_data(sim_net):
         return
 
 
-def _get_node_plot_props(G, node_class=None):
-    cm = plt.get_cmap('RdYlGn')  # Shade from red (inhibitory) to green (excitatory)
+def _get_node_plot_props(G, node_class=None, max_energy=None, active_node_color=None, active_edge_color=None,
+                         dead_node_color=None):
+    cm = plt.get_cmap('RdBu')  # Shade from red (inhibitory) to green (excitatory)
     nodes = G.nodes(node_class)
     adj_matrix = nx.adjacency_matrix(G)
-
     node_pos = {n_id: G.node[n_id]['pos'] for n_id in nodes}
     edge_width = np.array([d['weight'] for (u, v, d) in G.edges(data=True) if u in nodes])
+    firing_nc = colors.hex2color(active_node_color) if active_node_color is not None \
+        else list(colors.hex2color(RENDER_NODE_PROPS['Firing']['node_face_color']))
+    dead_nc = colors.hex2color(dead_node_color) if dead_node_color is not None \
+        else list(colors.hex2color(RENDER_NODE_PROPS['Dead']['node_face_color']))
+    _ = firing_nc.append(1.)
+    _ = dead_nc.append(1.)
+
+    node_colors = _get_node_colors(G, cm, node_class=node_class, max_energy=max_energy, firing_node_color=firing_nc,
+                                   dead_node_color=dead_nc)
 
     if node_class is not None:
         min_ns, max_ns = RENDER_NODE_PROPS[node_class]['min_node_size'], RENDER_NODE_PROPS[node_class]['max_node_size']
-        node_colors = np.array([-float(G.node[n_id]['energy_value']) if G.node[n_id]['node_type'] == 'I'
-                                else float(G.node[n_id]['energy_value']) for n_id in nodes])
-        for i, n in enumerate(node_colors):
-            node_colors[i] = n / node_colors.max() if n > 0. else n / np.abs(node_colors.min())
-        node_colors = cm((node_colors + 1.) * 256. / 2.)  # normalize to 0-256 and get colors
         node_shape = RENDER_NODE_PROPS[node_class]['shape']
         node_size = np.array([np.maximum(adj_matrix[i].sum(), .01) for i, n_id in enumerate(G.nodes())
                               if
                               G.node[n_id]['node_class'] == node_class])  # proportional to the number of connections
     else:
-        node_colors = np.array([G.node[n_id]['energy_value'] for n_id in nodes])
-        node_colors = cm(256. * (0.5 + node_colors / (2 * node_colors.max())))  # normalize to 0-256 and get colors
         node_shape, node_size = RENDER_NODE_PROPS['Default']['shape'], adj_matrix.sum(axis=1)
         min_ns, max_ns = RENDER_NODE_PROPS['Default']['min_node_size'], RENDER_NODE_PROPS['Default']['max_node_size']
 
     node_size = min_ns + (max_ns - min_ns) * (node_size - node_size.min()) / (node_size.max() - node_size.min()) \
         if node_size.max() > node_size.min() else max_ns * np.ones_like(node_size)
     return node_pos, node_colors, node_shape, node_size, edge_width
+
+
+def _get_node_colors(G, cmap, node_class=None, max_energy=None, firing_node_color=None, dead_node_color=None):
+    if node_class in ['Active', 'Dead', 'Firing']:
+        return []
+    if node_class is not None:
+        node_colors = np.array([-float(G.node[n_id]['energy_value']) if G.node[n_id]['node_type'] == 'I'
+                                else float(G.node[n_id]['energy_value']) for n_id in G.nodes(node_class)])
+        max_e = abs(node_colors.max()) if max_energy is None else max_energy
+        node_colors = np.array([n / max_e for n in node_colors])
+        node_colors = cmap((node_colors + 1.) * 256. / 2.)  # normalize to 0-256 and get colors
+
+    else:
+        node_colors = []
+        for i, n_id in enumerate(G.nodes(node_class)):
+            node_colors.append(G.node[n_id]['energy_value'] if G.node[n_id]['node_type'] == 'E'
+                               else -G.node[n_id]['energy_value'])
+        node_colors = np.array(node_colors).astype(float)
+        node_colors = node_colors - node_colors.min()
+
+        max_e = np.abs(node_colors).max() if max_energy is None else max_energy
+        # print node_colors
+        node_colors = cmap(node_colors / max_e)  # normalize to 0-256 and get colors
+        # print node_colors
+        # print "---"
+
+    node_colors = node_colors.astype(list)
+    if firing_node_color is not None:
+        for i, n_id in enumerate(G.nodes(node_class)):
+            node_colors[i] = firing_node_color if G.is_node_firing(n_id) else node_colors[i]
+
+    if dead_node_color is not None:
+        for i, n_id in enumerate(G.nodes(node_class)):
+            node_colors[i] = dead_node_color if G.is_node_dead(n_id) else node_colors[i]
+
+    return node_colors
+
+
+def plot_node_property_ts(sim_data, kind='vlines', prop='value', neuron_ids=None, ax=None, **kwargs):
+    """Plot the time-series of the neuron's property."""
+    def plt_one_ts(series, iax):
+        if kind == 'line':
+            _pts = iax.plot(t, series.values, 'ro--', ms=12, mec='r')
+        elif kind == 'vlines':
+            _lines = iax.vlines(t, ymin=0, ymax=series.values, colors='r', lw=2)
+        iax.set(ylim=(series.min() - y_l_buff, series.max() + y_u_buff),
+                xlim=(series.index.min() - xbuff, series.index.max() + xbuff))
+        iax.set_ylabel(series.name)
+        return iax
+    xbuff, y_u_buff, y_l_buff = 0.1, 0.2, 0.0
+    t = range(len(sim_data))
+    data = pd.DataFrame(sim_data.neuron_ts(prop))
+    if isinstance(neuron_ids,(list, np.ndarray)):  # plot list of neuron_ids
+        if ax is None:
+            fig, ax = plt.subplots(len(neuron_ids), sharex=True)
+        for i, neuron_id in enumerate(neuron_ids):
+            series = data[neuron_id]
+            ax[i] = plt_one_ts(series, ax[i])
+        fig.subplots_adjust(hspace=0)
+        bottom_ax, top_ax = ax[-1], ax[0]
+    elif neuron_ids is None:  # plot all
+        if ax is None:
+            fig, ax = plt.subplots(len(data.columns), sharex=True)
+        for i, neuron_id in enumerate(data):
+            series = data[neuron_id]
+            ax[i] = plt_one_ts(series, ax[i])
+        fig.subplots_adjust(hspace=0)
+        bottom_ax, top_ax = ax[-1], ax[0]
+    else:  # plot 1 series
+        if ax is None:
+            fig, ax = plt.subplots()
+        series = data[neuron_ids]
+        ax = plt_one_ts(series, ax)
+        bottom_ax, top_ax = ax, ax
+    bottom_ax.set_xlabel('time')
+    top_ax.set_title('Neuronal "%s" Time Series' % prop)
+    return ax
+
+
+def degree_histogram(g, min_weight=0, as_probability=False, ax=None):
+    # Create histogram of node connections
+    mybars = g.degree()
+    edges = g.edge
+    cnts = []
+    for n1 in g.nodes():
+        cnt = 0
+        for n_out, to_nodes in edges.iteritems():
+            if n_out == n1:
+                for n_in, props in to_nodes.iteritems():
+                    cnt = cnt + 1 if props['weight'] > min_weight else cnt
+        cnts.append(cnt)
+
+    vals, bins = np.histogram(cnts, bins=range(int(max(cnts))))
+    if as_probability:
+        vals = vals/vals.sum()
+    ax.bar(bins[:-1], vals)
+    ax.set_title("Outgoing Synapses per Neuron Distribution\nMinimum Synaptic Cutoff: %s" % min_weight)
+    ax.set_xticks(range(int(max(cnts))))
+#    ax.show() # show histogram
+    return ax

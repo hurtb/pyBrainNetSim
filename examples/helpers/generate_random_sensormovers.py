@@ -39,13 +39,13 @@ sm1.sim_time_steps(max_iter=5)
 sm1n1 = sm1.internal.simdata[-1]
 sm1ds = sm1.internal.simdata
 #print sm1n1.energy_vector
-#print sm1.internal.simdata.node_group_properties('postsyn_vector')[['M1','M2']]
+#print sm1.internal.simdata.neuron_group_property_ts('postsyn_vector')[['M1','M2']]
 #print sm1.efficiency()
 print sm1.trajectory
 print sm1.sensory_gradients
 print sm1.efficiency()
 
 nodes = ['S0','S1','S2','S3']
-#print sm1.internal.simdata.node_group_properties('spont_vector')[['M0','M1','M2','M3']]
-print "Pre:\n%s" % sm1.internal.simdata.node_group_properties('presyn_vector')[nodes]
-print "Post:\n%s" % sm1.internal.simdata.node_group_properties('postsyn_vector')[nodes]
+#print sm1.internal.simdata.neuron_group_property_ts('spont_vector')[['M0','M1','M2','M3']]
+print "Pre:\n%s" % sm1.internal.simdata.neuron_group_property_ts('presyn_vector')[nodes]
+print "Post:\n%s" % sm1.internal.simdata.neuron_group_property_ts('postsyn_vector')[nodes]

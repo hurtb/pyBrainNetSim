@@ -8,6 +8,7 @@ Created on Mon Jan 18 15:07:23 2016
 import os
 import matplotlib.pyplot as plt
 import numpy as np
+import pickle
 
 
 def create_movie(plotter, numberOfFrames, fps=10, fpath='', fname='movie.mp4'):
@@ -58,3 +59,21 @@ def pol2cart(rho, phi):
     x = rho * np.cos(phi)
     y = rho * np.sin(phi)
     return x, y
+
+
+def hex_to_rgb(value):
+    value = value.lstrip('#')
+    lv = len(value)
+    return tuple(int(value[i:i + lv // 3], 16) for i in range(0, lv, lv // 3))
+
+
+def points_to_segments(points):
+    """Returns a list of [[x0,x1], [x1, x2], ...] from [x0, x1, x2 ...]"""
+    segs = []
+    for i in range(len(points)-1):
+        segs.append([points[i], points[i+1]])
+    return segs
+
+def save_pickle(objs, file_name):
+    with open(file_name, 'w') as f:
+        pickle.dump(objs, f)

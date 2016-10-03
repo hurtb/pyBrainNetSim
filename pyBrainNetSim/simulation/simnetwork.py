@@ -54,13 +54,19 @@ class SimNetBase(object):
         return out
         
     def evolve_time_step(self, driven_nodes=None):
+        """
+        Main method to run one simulation time step. Each method call within this method can be overidden with
+        custom methods. An example of this is the 'HebbianNetworkBasic' class.
+        :param driven_nodes: A way to manually drive certain nodes in the model.
+        :return: None
+        """
         nd = self.simdata[-1]
 
         self.add_driven(nd, driven_nodes=driven_nodes) # Externally (forced) action potentials
         self.add_spontaneous(nd)  # add spontaneous firing
         self.find_inactive(nd)  # get potential post-synaptic nodes
         self.integrate_action_potentials(nd)  # integrate action potentials
-        self.propagate_action_potential(nd)  # Combine propagating and spontaneous action potentials
+        self.propagate_action_potentials(nd)  # Combine propagating and spontaneous action potentials
         nd.update_properties()  # update data structures
         if self.simdata[-1].is_dead:
             return
@@ -102,7 +108,7 @@ class SimNetBase(object):
         """Integration of action potentials"""
         pass
 
-    def propagate_action_potential(self, ng):
+    def propagate_action_potentials(self, ng):
         """ Propagate action potential from pre to post given the network's thresholds."""
         pass
         
@@ -121,33 +127,20 @@ class SimNetBase(object):
     def draw_networkx(self, t=None, axs=None):
         """Draw networkx graphs for time points indicated"""
         max_cols, max_axs, color, alpha = 5, 20, '#D9F2FA', 0.5
-        if t is None or not isinstance(t, [int, float, list, tuple, np.ndarray]):
+        if t is None or not isinstance(t, (int, float, list, tuple, np.ndarray)):
             t = range(self.n + 1) if t is None or isinstance(t, [int, float]) else t  # get all points
         else:
-            t = [t] if isinstance(t, [int, float]) else t  # get all points
+            t = [t] if isinstance(t, (int, float)) else t  # get all points
         num_ax = len(t)
         if axs is None or num_ax != len(axs):
             rows = int(np.floor(num_ax / max_cols)) + 1
             cols = num_ax if num_ax <= max_cols else max_cols
             axs = [plt.subplot2grid((rows, cols), (i/cols, i % cols)) for i in range(num_ax)]
-
+        max_e = np.array(nx.get_node_attributes(self.simdata[0],'energy_value').values()).max()
         for i, ax in enumerate(axs):
-            # i_subg = self.simdata[-1].subgraph(self.simdata[-1].nodes('Internal'))
-            # i_points = np.array([p for p in nx.get_node_attributes(i_subg, 'pos').itervalues()])
-            # i_hull = ConvexHull(i_points)
-            #
-            # m_subg = self.simdata[-1].subgraph(self.simdata[-1].nodes('Motor'))
-            # s_subg = self.simdata[-1].subgraph(self.simdata[-1].nodes('Sensory'))
-            #
-
-            axs[i] = draw_networkx(self.simdata[i], ax=ax)
+            axs[i] = draw_networkx(self.simdata[i], ax=ax, max_e=max_e)
             axs[i].axis('square')
             axs[i].set(xticklabels=[], yticklabels=[])
-            # axs[i].add_patch(patches.Polygon([i_points[k] for k in i_hull.vertices], color=color, alpha=alpha))
-            # for m_id, attr in m_subg.node.iteritems():
-            #     axs[i].arrow(attr['pos'][0], attr['pos'][1], attr['force_direction'][0]/2, attr['force_direction'][1]/2,
-            #                  head_width=0.05, head_length=0.1, fc='k', ec='k')
-
         plt.tight_layout(pad=0.05)
         return axs
 
@@ -170,7 +163,7 @@ class SimNet(SimNetBase):
                 continue
             if in_per > len(ng):
                 in_per = len(ng)
-            numfire = self.simdata.node_group_properties('presyn_vector')[nID][-int(in_per):].sum()
+            numfire = self.simdata.neuron_group_property_ts('presyn_vector')[nID][-int(in_per):].sum()
             if numfire > 0.:
                 inact.append(nID)
         ng.inactive_nodes = inact
@@ -179,7 +172,7 @@ class SimNet(SimNetBase):
         """Integration of action potentials"""
         ng.postsyn_signal = np.multiply(ng.synapses.T, ng.presyn_vector).T.sum(axis=0).A[0]
 
-    def propagate_action_potential(self, ng):
+    def propagate_action_potentials(self, ng):
         """Propagate AP from pre to post given the network's thresholds."""
         thresh = nx.get_node_attributes(ng, 'threshold').values()
         ng.prop_vector = (ng.postsyn_signal + ng.spont_signal + ng.driven_vector > thresh).astype(float)
@@ -211,6 +204,7 @@ class HebbianNetworkBasic(SimNet):
                  initial_N=None, prescribed=None, *args, **kwargs)
         self.pos_synapse_growth = pos_synapse_growth
         self.neg_synapse_growth = neg_synapse_growth
+
     def synapse_plasticity(self, ng, *args, **kwargs):
         """Basic Hebbian learning rule."""
         nodes = ng.nodes()
