@@ -11,7 +11,7 @@ sys.path.append('../../')
 from pyBrainNetSim.models.individuals import SensorMover
 from pyBrainNetSim.models.world import Environment, Attractor
 from pyBrainNetSim.solvers.solver import SensorMoverEvolutionarySolver
-from pyBrainNetSim.generators.random import InternalPropertyDistribution, MotorPropertyDistribution, SensoryPropertyDistribution
+from pyBrainNetSim.generators.networks import InternalNodeProperties, MotorNodeProperties, SensoryNodeProperties
 from scipy.stats import norm, binom, randint, poisson, uniform
 
 INTERNAL = {'number': randint(low=10, high=40),
@@ -19,14 +19,14 @@ INTERNAL = {'number': randint(low=10, high=40),
             'energy_consumption': randint(low=1, high=4),
             'threshold': uniform(loc=0.7, scale=1.2),
             'spontaneity': uniform(loc=0.7, scale=1.2)}
-internal = InternalPropertyDistribution(INTERNAL)
+internal = InternalNodeProperties(INTERNAL)
 
 MOTOR = {'energy': binom(50, 0.5),
          'energy_consumption': randint(low=1, high=4),
          'threshold': uniform(loc=0.7, scale=1.2),
          'spontaneity': uniform(loc=0.0, scale=1.0),
          'direction': [(1, 0), (-1, 0), (0, 1), (0, -1)]}
-motor = MotorPropertyDistribution(MOTOR)
+motor = MotorNodeProperties(MOTOR)
 
 SENSORY = {'energy': binom(50, 0.5),
            'energy_consumption': randint(low=1, high=4),
@@ -37,7 +37,7 @@ SENSORY = {'energy': binom(50, 0.5),
            'min_stimulation': 0.,
            'mid_sensory': uniform(loc=.05, scale=.95),
            }
-sensor = SensoryPropertyDistribution(SENSORY)
+sensor = SensoryNodeProperties(SENSORY)
 
 MAX_ITER = 50
 

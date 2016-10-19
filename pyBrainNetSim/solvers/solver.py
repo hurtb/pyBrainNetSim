@@ -1,4 +1,4 @@
-from pyBrainNetSim.generators.random import SensorMoverPropertyDistribution
+from pyBrainNetSim.generators.networks import SensorMoverProperties
 from pyBrainNetSim.models.individuals import SensorMover
 
 
@@ -18,7 +18,7 @@ class SensorMoverEvolutionarySolver(object):
     def __init__(self, environment, sensormover_distribution=None, num_individuals=100, max_generations = 10,  *args, **kwargs ):
         self.environment = environment
         self.sm_dist = sensormover_distribution if sensormover_distribution is not None\
-            else SensorMoverPropertyDistribution()
+            else SensorMoverProperties()
         self.n = 0  # iteration number
         self.g = 0  # generation number
         self.num_individuals = num_individuals

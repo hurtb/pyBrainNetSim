@@ -11,9 +11,9 @@ sys.path.append('../../')
 from pyBrainNetSim.models.individuals import SensorMover
 from pyBrainNetSim.models.world import Environment, Attractor
 from pyBrainNetSim.solvers.solver import SensorMoverEvolutionarySolver
-from pyBrainNetSim.generators.random import SensorMoverPropertyDistribution, \
- SensoryPropertyDistribution, InternalPropertyDistribution, \
- WeightPropertyDistribution, MotorPropertyDistribution
+from pyBrainNetSim.generators.networks import SensorMoverProperties, \
+ SensoryNodeProperties, InternalNodeProperties, \
+ EdgeProperties, MotorNodeProperties
 
 
 class EvolutionarySolverTest(SensorMoverEvolutionarySolver):
@@ -31,7 +31,7 @@ if __name__ == '__main__':
     
     e0 = Environment((10,10))
     a0 = Attractor(environment=e0, location=(0, 0), strength=1., decay_rate=0.1)
-    smpd = SensorMoverPropertyDistribution()
+    smpd = SensorMoverProperties()
     G = smpd.create_digraph()
 #    ts = SensorMoverTest(e0, position=(5,5), sensors=[(0,1),(0,-1)], 
 #                 motor_dir=[(1,0),(-1,0),(0,1),(0,-1)], internal_neurons=6,

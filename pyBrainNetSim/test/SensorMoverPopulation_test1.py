@@ -8,9 +8,9 @@ Created on Sat Apr 09 14:48:56 2016
 import sys
 sys.path.append('../../')
 import numpy as np
-from pyBrainNetSim.generators.random import SensorMoverPropertyDistribution, \
- SensoryPropertyDistribution, InternalPropertyDistribution, \
- WeightPropertyDistribution, MotorPropertyDistribution
+from pyBrainNetSim.generators.networks import SensorMoverProperties, \
+ SensoryNodeProperties, InternalNodeProperties, \
+ EdgeProperties, MotorNodeProperties
 from pyBrainNetSim.models.network import NeuralNetData
 from pyBrainNetSim.models.world import Environment, Individual, Attractor
 from pyBrainNetSim.models.individuals import SensorMover
@@ -21,14 +21,14 @@ import matplotlib.pyplot as plt
 import pandas as pd
 
 # Method 2: Explicit use of distributions
-ipd = InternalPropertyDistribution(**{"number_neurons": 4, 
+ipd = InternalNodeProperties(**{"number_neurons": 4,
                                       'energy_value': 2.,
                                       'threshold': 1.,
                                       'spontaneity': 1.})
-spd = SensoryPropertyDistribution(**{'energy_value': 2, 'spontaneity': 1., 'threshold': 1.})
-mpd = MotorPropertyDistribution(**{'energy_value': 2})
-wpd = WeightPropertyDistribution()
-smpd = SensorMoverPropertyDistribution(ipd, spd, mpd, wpd)
+spd = SensoryNodeProperties(**{'energy_value': 2, 'spontaneity': 1., 'threshold': 1.})
+mpd = MotorNodeProperties(**{'energy_value': 2})
+wpd = EdgeProperties()
+smpd = SensorMoverProperties(ipd, spd, mpd, wpd)
 G = smpd.create_digraph()
 
 

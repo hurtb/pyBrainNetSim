@@ -8,9 +8,9 @@ Created on Sat Apr 09 14:48:56 2016
 import sys
 sys.path.append('../')
 import numpy as np
-from pyBrainNetSim.generators.random import SensorMoverPropertyDistribution, \
- SensoryPropertyDistribution, InternalPropertyDistribution, \
- WeightPropertyDistribution, MotorPropertyDistribution
+from pyBrainNetSim.generators.networks import SensorMoverProperties, \
+ SensoryNodeProperties, InternalNodeProperties, \
+ EdgeProperties, MotorNodeProperties
 from pyBrainNetSim.models.network import NeuralNetData
 from pyBrainNetSim.models.world import Environment, Individual, Attractor
 from pyBrainNetSim.models.individuals import SensorMover
@@ -18,15 +18,15 @@ from pyBrainNetSim.drawing.viewers import vTrajectory
 from pyBrainNetSim.simulation.simnetwork import HebbianNetworkBasic
 
 # Method 1: Simple, using default values/distributions
-smpd1 = SensorMoverPropertyDistribution()
+smpd1 = SensorMoverProperties()
 G1 = smpd1.create_digraph()  # creates a networkx DiGraph
 
 # Method 2: Explicit use of distributions
-ipd = InternalPropertyDistribution(**{"number_neurons": 5})
-spd = SensoryPropertyDistribution()
-mpd = MotorPropertyDistribution()
-wpd = WeightPropertyDistribution()
-smpd2 = SensorMoverPropertyDistribution(ipd, spd, mpd, wpd)
+ipd = InternalNodeProperties(**{"number_neurons": 5})
+spd = SensoryNodeProperties()
+mpd = MotorNodeProperties()
+wpd = EdgeProperties()
+smpd2 = SensorMoverProperties(ipd, spd, mpd, wpd)
 G2 = smpd2.create_digraph()
 
 # Create environment

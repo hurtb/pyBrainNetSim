@@ -1,5 +1,5 @@
 
-from pyBrainNetSim.generators.random import SensorMoverPropertyDistribution
+from pyBrainNetSim.generators.networks import SensorMoverProperties
 from pyBrainNetSim.models.individuals import SensorMover
 from pyBrainNetSim.simulation.simnetwork import HebbianNetworkBasic
 from pyBrainNetSim.drawing.viewers import draw_networkx
@@ -125,7 +125,6 @@ class SensorMoverPopulationBase(object):
         cols = int(num) if num <= max_cols else max_cols
         axs = [plt.subplot2grid((rows, cols), (i / cols, i % cols)) for i in range(num)]
         return axs
-
 
 
 class SensorMoverPopulation(SensorMoverPopulationBase):

@@ -2,7 +2,7 @@ import matplotlib as mpl
 import matplotlib.pyplot as plt
 import networkx as nx
 import pyBrainNetSim.models.world as world
-import pyBrainNetSim.generators.random as rnd
+import pyBrainNetSim.generators.networks as rnd
 import pyBrainNetSim.drawing.viewers as vis
 import pyBrainNetSim.simulation.evolution as evo
 from pyBrainNetSim.drawing import animations as ani
@@ -33,9 +33,9 @@ weight_props = {'int_to_int': 1.,
                 'edge_sensor_min_cutoff': .2
                 }
 
-sm_prop_dist = rnd.SensorMoverPropertyDistribution(internal=rnd.InternalPropertyDistribution(**internal_props),
-                                                   sensors=rnd.SensoryPropertyDistribution(**sensor_props),
-                                                   weights=rnd.WeightPropertyDistribution(**weight_props))
+sm_prop_dist = rnd.SensorMoverProperties(internal=rnd.InternalNodeProperties(**internal_props),
+                                         sensors=rnd.SensoryNodeProperties(**sensor_props),
+                                         weights=rnd.EdgeProperties(**weight_props))
 
 my_environment = world.Environment(origin=(-10, -10), max_point=(10, 10), field_permeability=1.)
 food = world.Attractor(environment=my_environment, position=(3, 3), strength=10.)  # add "food"

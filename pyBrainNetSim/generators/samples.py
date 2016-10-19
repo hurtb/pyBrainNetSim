@@ -2,7 +2,7 @@ import pandas as pd
 import pyBrainNetSim.models.world as world
 import pyBrainNetSim.models.network as network
 import pyBrainNetSim.simulation.simnetwork as sim
-import pyBrainNetSim.generators.random as rnd
+import pyBrainNetSim.generators.networks as rnd
 
 
 def test1():
@@ -13,10 +13,10 @@ def test1():
     weight_props = {'int_to_int': 1., 'int_to_motor': 1., 'sensor_to_int': 0.5,
                     'sensory_max_connections': 1., 'motor_max_connections': 1.}
 
-    sm_prop_dist = rnd.SensorMoverPropertyDistribution(internal=rnd.InternalPropertyDistribution(**internal_props),
-                                                       sensors=rnd.SensoryPropertyDistribution(**sensor_props),
-                                                       motor=rnd.MotorPropertyDistribution(**motor_props),
-                                                       weights=rnd.WeightPropertyDistribution(**weight_props))
+    sm_prop_dist = rnd.SensorMoverProperties(internal=rnd.InternalNodeProperties(**internal_props),
+                                             sensors=rnd.SensoryNodeProperties(**sensor_props),
+                                             motor=rnd.MotorNodeProperties(**motor_props),
+                                             weights=rnd.EdgeProperties(**weight_props))
     g = sm_prop_dist.create_digraph()
     return g
 

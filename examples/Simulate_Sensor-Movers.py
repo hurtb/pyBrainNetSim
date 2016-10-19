@@ -2,7 +2,7 @@ import numpy as np
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 import networkx as nx
-import pyBrainNetSim.generators.random as rnd
+import pyBrainNetSim.generators.networks as rnd
 import pyBrainNetSim.models.world as world
 import pyBrainNetSim.drawing.viewers as vis
 import pyBrainNetSim.simulation.evolution as evo
@@ -14,14 +14,14 @@ time_steps = 50
 my_environment = world.Environment(origin=(-10, -10), max_point=(10, 10), field_permeability=1.)
 food = world.Attractor(environment=my_environment, position=(3, 3), strength=10.)  # add "food"
 
-ipd = rnd.InternalPropertyDistribution(**{"number_neurons": 16,
+ipd = rnd.InternalNodeProperties(**{"number_neurons": 16,
                                           'excitatory_to_inhibitory':.7,
                                           'spontaneity': 0.05,
                                           'inactive_period': 1.})
-spd = rnd.SensoryPropertyDistribution()
-mpd = rnd.MotorPropertyDistribution()
-wpd = rnd.WeightPropertyDistribution()
-sm_prop_dist = rnd.SensorMoverPropertyDistribution(ipd, spd, mpd, wpd)  # default set of distributions of the different variables in the mouse
+spd = rnd.SensoryNodeProperties()
+mpd = rnd.MotorNodeProperties()
+wpd = rnd.EdgeProperties()
+sm_prop_dist = rnd.SensorMoverProperties(ipd, spd, mpd, wpd)  # default set of distributions of the different variables in the mouse
 smp = evo.SensorMoverPopulation(my_environment, sm_prop_dist, initial_population_size=population_size)
 print "Created %d individuals" % population_size
 smp.sim_time_steps(max_iter=time_steps)
