@@ -12,33 +12,61 @@ import numpy as np
 class SensorMoverPopulationBase(object):
 
     def __init__(self, environment, sensor_mover_driver_distribution, network_type=HebbianNetworkBasic,
-                 initial_population_size=25, share_world=False):
+                 initial_population_size=25, share_world=False, reproductive_cost=0.5, reproductive_threshold=10,
+                 *args, **kwargs):
+        self.reproductive_cost, self.reproductive_threshold = reproductive_cost, reproductive_threshold
+        self.reproduction_mode = 'asexual'
         self.share_world = share_world
         self.environment = environment  # base environment
         self.smd_dist = sensor_mover_driver_distribution
         self.network_type = network_type
         self.initial_population_size = initial_population_size
+        self._population_size = {'existing':[], 'born': [], 'found_target': [], 'died': []}
         self.individuals = {}
         self.t, self.n = 0, 0
         self._create_initial_population()
 
     def _create_initial_population(self):
         for i in range(self.initial_population_size):
-            self.add_individual()
+            self.create_and_add_individual()
 
-    def add_individual(self, position=None):
+    def create_and_add_individual(self, position=None):
         network = self.network_type(self.smd_dist.create_digraph())
         env = self.environment if self.share_world else copy.copy(self.environment)
         env.rm_individuals()
         _id = 'G0_I%s' % self.n
-        sm = SensorMover(env, position=env.generate_position(position), initial_network=network, ind_id=_id)
-        self.individuals.update({sm.ind_id: sm})
-        self.environment.add_individual(sm)
+        sm = SensorMover(env, position=env.generate_position(position), initial_network=network, ind_id=_id,
+                         reproduction_cost=self.reproductive_cost, reproductive_threshold=self.reproductive_threshold)
+        self.add_individual(sm)
+        # self.environment.add_individual(sm)  # not sure if this is needed
         self.n += 1
 
+    def add_individual(self, individual):
+        if individual.ind_id not in self.individuals:
+            self.individuals.update({individual.ind_id: individual})
+
+    def add_individuals(self, individuals):
+        _ = [self.add_individual(individual) for individual in individuals]
+
+    def rm_individual(self, individual):
+        self.individuals.pop(individual.ind_id)
+
+    def rm_individuals(self, individuals):
+        _ = [self.rm_individual(individual) for individual in individuals]
+
     def sim_time_step(self):
+        _new_individuals, _dead_individuals, found_target = [], [], 0
         for sm in self.individuals.itervalues():
-            sm.sim_time_step()
+            child = sm.sim_time_step()
+            if sm.is_dead:
+                _dead_individuals.append(sm)
+            if child:
+                _new_individuals.append(child)
+            found_target += 1 if sm.found_target() else 0
+        self.__update_population_size({'existing': len(self.individuals), 'born': len(_new_individuals),
+                                       'found_target': found_target, 'died': len(_dead_individuals)})
+        self.add_individuals(_new_individuals)
+        self.rm_individuals(_dead_individuals)
         self.t += 1
 
     def sim_time_steps(self, max_iter=10):
@@ -47,11 +75,21 @@ class SensorMoverPopulationBase(object):
             for ind in self.individuals.itervalues():
                 n += 1 if ind.is_living else 0
             trg = ' '.join([ind.ind_id for ind in self.individuals.itervalues() if ind.found_target()])
-            print "t: %d | Number Living: %d | Found Target: %s" % (self.t, n, trg)
             self.sim_time_step()
+
+    def __update_population_size(self, pop_dict):
+        for key, val in pop_dict.iteritems():
+            self._population_size[key].append(val)
 
     def __pandas_df_from_series(self, attr):
         return pd.DataFrame({sm_id: getattr(sm.internal.simdata, attr) for sm_id, sm in self.individuals.iteritems()})
+
+    def test_attr(self, attr):
+        return {sm_id: getattr(sm.internal.simdata, attr) for sm_id, sm in self.individuals.iteritems()}
+
+    @property
+    def population_size(self):
+        return pd.DataFrame(self._population_size)
 
     @property
     def trajectory(self):

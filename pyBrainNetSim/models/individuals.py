@@ -10,10 +10,12 @@ File holding the different models
 import numpy as np
 from world import Individual
 import pandas as pd
+import copy
 
 
 class SensorMover(Individual):
-    def __init__(self, environment, position=None, initial_network=None, ind_id=None, *args, **kwargs):
+    def __init__(self, environment, position=None, initial_network=None, ind_id=None, reproduction_mode='asexual',
+                 reproduction_cost=0.5, reproductive_threshold=10, *args, **kwargs):
         """
         Class used to simulate the how a 'SensorMover' individual operates in the environment it is placed in.
         :param environment:
@@ -23,15 +25,16 @@ class SensorMover(Individual):
         :param kwargs:
         :return:
         """
-        super(SensorMover, self).__init__(environment, position, ind_id, **kwargs)
-        self.internal = initial_network
-        self.internal.initiate_simulation()
+        super(SensorMover, self).__init__(environment, position=position, ind_id=ind_id,
+                                          reproduction_cost=reproduction_cost,
+                                          reproductive_threshold=reproductive_threshold,
+                                          reproduction_mode=reproduction_mode, **kwargs)
+        self.internal = []
         self.motor_activations = []
         self._sensory_gradients = []  # along trajectory
         self._internal_sensory_signals = []  # what the sensors sense.
-        self.parent = None
         self.consumed = []
-        self.t = 0.
+        self.set_internal_network(initial_network)
          
     def sim_time_step(self):
         """
@@ -42,7 +45,6 @@ class SensorMover(Individual):
         if self.found_target():  # 1. Award energy & 2. Move/Create new attractor
             self.internal.add_energy(self.consumed[-1].energy_value)
             self.environment.rm_attractor(self.consumed[-1].a_id)
-
         self._sensory_gradients.append(self.environment.attractor_gradient_at(self.position, field_type='Sensory'))
         # get sensory field for each sensor at individual's position fire sensory neurons accordingly
         sens_firing = []
@@ -50,7 +52,10 @@ class SensorMover(Individual):
         self._evaluate_sensory_signals(self.internal.simdata[-1])
         self.move(self._motor_actions(self.internal.simdata[-1]))  # apply motor output
         self.t += 1
-        
+        child = self.reproduce(mode=self.reproduction_mode) if self.to_reproduce else None
+
+        return child
+
     def sim_time_steps(self, max_iter=10):
         """
         Simulate in time.
@@ -88,6 +93,10 @@ class SensorMover(Individual):
                     move[i] = 0.
         return move
 
+    @property
+    def to_reproduce(self):
+        return True if self.reproductive_energy > self.reproductive_energy_threshold else False
+
     def __filter_pos(self, pos):
         if not self.in_world(pos):
             pos -= 1.
@@ -97,6 +106,12 @@ class SensorMover(Individual):
         for nID in ng.nodes():
             ng.node[nID]['energy_value'] = \
                 ng.node[nID]['energy_dynamics'](ng.node[nID]['energy_value'], ng.node[nID]['energy_consumption'])
+
+    def set_internal_network(self, network, t0=0):
+        self.internal = network
+        if len(self.internal.simdata)>0:
+            self.internal.initial_net = network.simdata[-1]
+        self.internal.initiate_simulation(network, t0=t0)
 
     @property
     def sensory_gradients(self):
@@ -141,6 +156,28 @@ class SensorMover(Individual):
     def plot_efficiency(self, **kwargs):
         eff = pd.Series(self.efficiency())
         eff.plot(style='o-')
+
+    def reproduce(self, mode='asexual', new_environment=True, energy_cost=0.50, *args, **kwargs):
+        child = super(SensorMover, self).reproduce(mode=mode, new_environment=new_environment,
+                                                   *args, **kwargs)
+        # Create new SensorMover with copied internal features (with error)
+        child.set_internal_network(copy.deepcopy(self.internal), t0=self.t)
+        p_self_e, p_child_e = self.internal.simdata[-1].total_energy, child.internal.simdata[-1].total_energy
+        energy_reduction_factor = (1-self.reproduction_cost) / 2.
+        child.internal.multiply_value('energy_value', factor=energy_reduction_factor)
+        self.internal.multiply_value('energy_value', factor=energy_reduction_factor)
+        # print "%s (e %s [%s], prior e: %s) @ t=%s to create %s (e %s, prior %s)" % \
+        #       (self.ind_id, self.internal.simdata[-1].total_energy, self.reproductive_energy_threshold, p_self_e, self.t, child.ind_id,
+        #        child.internal.simdata[-1].total_energy, p_child_e)
+        return child
+
+    @property
+    def reproductive_energy_threshold(self):
+        return self.internal.simdata[-1].max_energy_consumption_per_time_period * self.reproduction_threshold
+
+    @property
+    def reproductive_energy(self):
+        return (1. - self.reproduction_cost) * self.internal.simdata[-1].total_energy
 
 
 class SensorMoverFactory(object):

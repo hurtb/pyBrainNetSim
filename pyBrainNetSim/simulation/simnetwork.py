@@ -23,7 +23,8 @@ class SimNetBase(object):
     """
     def __init__(self, t0_network, initial_fire='rand', threshold=0.5,
                  initial_N=None, prescribed=None, *args, **kwargs):
-        self.initial_net = NeuralNetData(t0_network,**kwargs)
+        self.simdata = []
+        self.initial_net = NeuralNetData(t0_network, **kwargs)
         self.initial_nodes = self.initial_fire(mode=initial_fire, threshold=threshold,
                                                initial_N=initial_N,
                                                prescribed=prescribed)
@@ -33,14 +34,16 @@ class SimNetBase(object):
     def simulate(self, max_iter=5, **kwargs):
         """ Simulation mode of the network."""
         if not self.is_initialized:  # initialize and setup simulation parameters
-            self.initiate_simulation(max_iter, dt=1, **kwargs)
+            self.initiate_simulation(max_iter=max_iter, dt=1, **kwargs)
         while self.t < self.T and not self.simdata[-1].is_dead:  # simulation loop
             self.evolve_time_step()      
 
-    def initiate_simulation(self, max_iter=5, dt=1): # setup parameters
-        self.t, self.dt, self.n, self.N = 0, dt, 0, max_iter # global time, dt, max iter
-        self.T = self.N * self.dt
-        self.simdata = NeuralNetSimData()
+    def initiate_simulation(self, initial_network=None, t0=0, max_iter=5, dt=1): # setup parameters
+        self.t, self.dt, self.n, self.N = t0, dt, 0, max_iter # global time, dt, max iter
+        self.T = self.N * self.dt + t0
+        self.simdata = NeuralNetSimData(t0=t0)
+        # print initial_network
+        # network = initial_network.simdata[0] if initial_network else self.initial_net.copy()
         self.simdata.append(NeuralNetData(self.initial_net.copy()))
         self.is_initialized = True
 
@@ -124,6 +127,16 @@ class SimNetBase(object):
         """Add/subtract neurons."""        
         pass
 
+    def multiply_value(self, attr, factor=1., node_id=None):
+        nn = self.simdata[-1]
+        if not isinstance(factor, (int, float)):
+            reduction_factor = 1.
+        if node_id in nn:
+            nn[node_id][attr] *= factor
+        else:
+            for nid in nn.node.iterkeys():
+                nn.node[nid][attr] *= factor
+
     def draw_networkx(self, t=None, axs=None):
         """Draw networkx graphs for time points indicated"""
         max_cols, max_axs, color, alpha = 5, 20, '#D9F2FA', 0.5
@@ -198,9 +211,9 @@ class SimNet(SimNetBase):
 
 
 class HebbianNetworkBasic(SimNet):
-    def __init__(self, t0_network, initial_fire='rand', threshold=0.5,
-                 initial_N=None, prescribed=None, pos_synapse_growth=0.1, neg_synapse_growth=-0.05, *args, **kwargs):
-        super(HebbianNetworkBasic, self).__init__(t0_network, initial_fire='rand', threshold=0.5,
+    def __init__(self, t0_network, initial_fire='rand', threshold=0.5, initial_n=None, prescribed=None,
+                 pos_synapse_growth=0.1, neg_synapse_growth=-0.05, *args, **kwargs):
+        super(HebbianNetworkBasic, self).__init__(t0_network, initial_fire='rand', threshold=threshold,
                  initial_N=None, prescribed=None, *args, **kwargs)
         self.pos_synapse_growth = pos_synapse_growth
         self.neg_synapse_growth = neg_synapse_growth

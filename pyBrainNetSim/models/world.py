@@ -14,6 +14,8 @@ from scipy.stats import randint
 from scipy.ndimage import zoom
 from pyBrainNetSim.utils import cart2pol
 import pyBrainNetSim.utils as utils
+import copy
+import random
 
 
 class Environment(object):
@@ -160,6 +162,8 @@ class Environment(object):
             pos = position
         return pos
 
+    # def copy_
+
     @property
     def positions(self):
         return []
@@ -191,35 +195,26 @@ class Attractor(object):
 
 class Individual(object):
     
-    def __init__(self, environment=None, position=None, ind_id=None, *args, **kwargs):
-        if position is None:
-            self._position = np.array([0., 0.])
-        elif len(position) == environment.d_size:
-            self._position = np.array(position).astype(np.float)
-        elif position == 'rand':
-            self._position = [np.random.randint(0, environment.max_point[0]),
-                              np.random.randint(0, environment.max_point[1])]
-        else:
-            self._position = np.array([0., 0.])
-
-        self._trajectory = [self._position.copy()]
+    def __init__(self, environment=None, position=None, ind_id=None, reproduction_cost=0.5,
+                 reproductive_threshold=10, reproduction_mode='asexual', *args, **kwargs):
+        self.parents, self.children, self.generation, self.kin, self.t = [], [], 0, 0, 0.
+        self.reproduction_cost, self.reproduction_threshold = reproduction_cost, reproductive_threshold
+        self.reproduction_mode = reproduction_mode
+        self._environment, self._position, self.d_size = None, None, 2
         self.ind_id = self._generate_id(ind_id)
+        self.set_environment(environment)
+        self.set_position(position)
+        self.set_trajectory([self.position.copy()])
 
-        if isinstance(environment, Environment):
-            environment.add_individual(self)
-            self.d_size = environment.d_size
-        self.environment = environment
-
-    def _generate_id(self, id=None):
-        return id
+    def _generate_id(self, ind_id=None, num_chars=4, choices='0123456789'):
+        if not ind_id or not isinstance(ind_id, str):
+            ind_id = ''.join(random.choice(choices) for i in range(num_chars))
+        return ind_id
         
     def move(self, vector):
         if len(vector) == self.d_size:
             self._position += np.array(vector, dtype=np.float)
             self._trajectory.append(self._position.copy())
-
-    def set_trajectory(self, trajectory):
-        self._trajectory = trajectory
 
     def in_world(self, pos):
         inworld = True
@@ -228,10 +223,40 @@ class Individual(object):
             inworld = False
         return inworld
 
+    def set_environment(self, environment):
+        env = environment
+        if isinstance(env, Environment):
+            env.add_individual(self)
+        elif not environment:
+            env = Environment()
+        self.d_size = env.d_size
+        self._environment = env
+
+    @property
+    def environment(self):
+        return self._environment
+
+    def set_trajectory(self, trajectory):
+        self._trajectory = trajectory
+
+    def trajectory_vector_to(self, target):
+        pass
+
     @property
     def trajectory(self):
         return np.array(self._trajectory) if not isinstance(self._trajectory, np.ndarray) else self._trajectory
-        
+
+    def set_position(self, position):
+        en = self.environment
+        if position is None:
+            self._position = np.zeros(en.d_size)
+        elif len(position) == en.d_size:
+            self._position = np.array(position).astype(np.float)
+        elif position == 'rand':
+            self._position = [np.random.randint(0, en.max_point[i]) for i in range(en.d_size)]
+        else:
+            self._position = np.zeros(en.d_size)
+
     @property
     def position(self):
         return np.array(self._position)
@@ -251,9 +276,6 @@ class Individual(object):
             vector /= euclidean(self.position, target)
         return vector
 
-    def trajectory_vector_to(self, target):
-        pass
-
     def efficiency(self, *args, **kwargs):
         """
         Method to evaluate an objective function. To be overriden.
@@ -261,6 +283,35 @@ class Individual(object):
         :return:
         """
         pass
+
+    def reproduce(self, mode='asexual', partner=None, new_environment=True, error_rate=0., *args, **kwargs):
+        child = None
+        if mode == 'asexual':
+            child = self._reproduce_asexually(error_rate)
+        elif mode == 'sexual':
+            child = self._reproduce_sexually(partner)
+        env = self.environment if not new_environment else None
+        child.set_environment(env, *args, **kwargs)
+        _tmp = [child.environment.add_attractor(attractor, attractor.field_type)
+                for attractor in self.environment.attractors.values()]
+        # child.set_position()
+        self.generation += 1
+        child.generation = self.generation
+        child.kin = child._generate_id()
+        child.ind_id = "G%d_I%s" % (child.generation, child.kin)
+        self.children.append(child)
+
+        return child
+
+    def _reproduce_asexually(self, error_rate=0.):
+        child = copy.copy(self)
+        child.parents = [self]
+        return child
+
+    def _reproduce_sexually(self, partner):
+        child = copy.copy(self)
+        child.parents = [self, partner]
+        return child
 
 
 class ScalarField(object):
@@ -333,5 +384,3 @@ class ExponentialDecayScalarField(ScalarField):
     def function(self, location=(0, 0), strength=1):
         p_grid = cart2pol(self.c_grid, location)
         return strength * np.exp(-p_grid[0] * self.field_permeability)
-
-

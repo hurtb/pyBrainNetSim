@@ -1,6 +1,6 @@
 import copy
 import types
-from itertools import combinations
+from itertools import permutations
 import networkx as nx
 import numpy as np
 import scipy as sp
@@ -91,8 +91,8 @@ class Properties(object):
 
     def sample_field(self, field, significant_figs=None):
         sample = self._chk_rand(field)
-        if isinstance(sample, float) and isinstance(significant_figs, (int, float)):
-            sample = np.around(sample, decimals=significant_figs)
+        # if isinstance(sample, float) and isinstance(significant_figs, (int, float)):
+        #     sample = np.around(sample, decimals=significant_figs)
         return sample
 
     def reset_props(self):
@@ -367,8 +367,8 @@ class EdgeProperties(Properties):
 
     def sample(self, node_list):
         w = []  # list of tuples [(nID1, nID2, weight_value), (nID1, ...)
-        for n in list(combinations(node_list, 2)):
-            # get existing number of incoming and outgoing edges before adding another
+        for n in list(permutations(node_list, 2)):
+            # TODO: get existing number of incoming and outgoing edges before adding another
             w.append((n[0][0], n[1][0], self.edges[n[0][1]['node_class']][n[1][1]['node_class']].sample()['weight']))
         return w
 

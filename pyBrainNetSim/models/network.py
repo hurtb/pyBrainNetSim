@@ -72,11 +72,11 @@ class NeuralNetData(nx.DiGraph):
 
     @property
     def nID_to_nIx(self):
-        return {nID:i for i,nID in enumerate(self.nodes())}
+        return {nID: i for i,nID in enumerate(self.nodes())}
 
     @property
     def nIx_to_nID(self):
-        return {i:nID for i,nID in enumerate(self.nodes())}
+        return {i: nID for i,nID in enumerate(self.nodes())}
 
     @property
     def active_nodes(self):
@@ -114,7 +114,7 @@ class NeuralNetData(nx.DiGraph):
         return self.nodeIDs_to_vector(self.driven_nodes)
 
     @property
-    def energy_vector(self):
+    def energy_consumption_vector(self):
         out = np.zeros(self.number_of_nodes())
         for i, n_id in enumerate(self.nodes()):
             if n_id in self.postsyn_nodes:
@@ -122,8 +122,16 @@ class NeuralNetData(nx.DiGraph):
         return out
 
     @property
+    def energy_vector(self):
+        return np.array([self.node[n_id]['energy_value'] for n_id in self.nodes()])
+
+    @property
     def total_energy(self):
         return self.energy_vector.sum()
+
+    @property
+    def total_energy_consumed(self):
+        return self.energy_consumption_vector.sum()
 
     @property
     def total_neurons(self):
@@ -155,7 +163,25 @@ class NeuralNetData(nx.DiGraph):
     def excitatory_to_inhibitory_ratio(self):
         nc = np.array([attr['node_type'] for attr in self.node.itervalues() if attr['node_class'] == 'Internal'])
         return (nc == 'E').sum().astype(np.float) / len(self.nodes(node_class='Internal'))
-        
+
+    @property
+    def max_energy_consumption_per_time_period(self):
+        return np.sum(nx.get_node_attributes(self, 'energy_consumption').values())
+
+    def eval_min_time_periods_remaining(self, energy):
+        return np.round(energy / self.max_energy_consumption_per_time_period)
+
+    @property
+    def min_time_periods_remaining(self):
+        """Estimate of the total energy of the SensorMover divided by the maximum energy that could be consumed in one
+         time period.
+        .. math::
+            \frac{\sum_{i \in all neurons} energy_i}{\sum_{all neurons} possible energy consumed per time step}
+         = total_energy / maxim
+
+         """
+        return self.eval_min_time_periods_remaining(self.total_energy)
+
     def nodeIDs_to_vector(self, nIDs):
         vector = np.zeros(self.number_of_nodes())
         if nIDs is None or len(nIDs) == 0:
@@ -188,10 +214,11 @@ class NeuralNetSimData(list):
      ...
      }  
     """
-    def __init__(self, *args, **kwargs):
+    def __init__(self, t0=0, *args, **kwargs):
         super(NeuralNetSimData, self).__init__(*args, **kwargs)
         self._fire_data = {}  # nodeID: time_series list
-        self._active = {}          
+        self._active = {}
+        self.t0 = t0
     
     @property
     def fire_data(self):
@@ -228,22 +255,23 @@ class NeuralNetSimData(list):
             return []  # TEMPORARY
         ts = {}
         for i, nn in enumerate(self):
+            t = i + self.t0  # adjust to world time
             for node, attr in nn.node.iteritems():
                 if node not in ts:
                     ts.update({node: {}})
                 if isinstance(prop, (list, tuple, np.ndarray)):
                     for pr in prop:
                         if pr not in ts[node]:
-                            ts[node].update({pr:{}})
+                            ts[node].update({pr: {}})
                         if pr not in attr:
-                            ts[node][pr].update({i: None})
+                            ts[node][pr].update({t: None})
                         else:
-                            ts[node][pr].update({i: attr[pr]})
+                            ts[node][pr].update({t: attr[pr]})
                 else:
                     if prop not in attr:
-                        ts[node].update({i: None})
+                        ts[node].update({t: None})
                     else:
-                        ts[node].update({i: attr[prop]})
+                        ts[node].update({t: attr[prop]})
         out = ts
         if isinstance(neuron_id, (list, tuple, np.ndarray)):
             out = {n_id: ts[n_id] for n_id in neuron_id}
@@ -259,15 +287,16 @@ class NeuralNetSimData(list):
         :return: dict
         """
         ts = {} # dict where {(afferent, efferent): [time series]}
-        pairs = pairs if len(pairs) > 2 and len(pairs[0])>1 else [pairs]
+        pairs = pairs if len(pairs) > 2 and len(pairs[0]) > 1 else [pairs]
         for i, nn in enumerate(self):
+            t = i + self.t0  # adjust to world time
             ed = nx.get_edge_attributes(nn, prop)
             for pair in pairs:
                 if pair not in ed:
                     continue
                 if pair not in ts:
                     ts.update({pair: {}})
-                ts[pair].append({i: ed[pair]})
+                ts[pair].append({t: ed[pair]})
         return ts
 
     @property
