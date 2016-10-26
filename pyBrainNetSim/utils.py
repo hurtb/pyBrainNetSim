@@ -77,3 +77,6 @@ def points_to_segments(points):
 def save_pickle(objs, file_name):
     with open(file_name, 'w') as f:
         pickle.dump(objs, f)
+
+def centroid(pts):
+    return np.mean(pts, axis=0)
