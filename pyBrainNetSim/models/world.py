@@ -198,7 +198,8 @@ class Individual(object):
     def __init__(self, environment=None, position=None, ind_id=None, reproduction_cost=0.5,
                  reproductive_threshold=10, reproduction_mode='asexual', *args, **kwargs):
         self.parents, self.children, self.generation, self.kin, self.t = [], [], 0, 0, 0.
-        self.reproduction_cost, self.reproduction_threshold = reproduction_cost, reproductive_threshold
+        self.reproduction_cost, = reproduction_cost
+        self.reproduction_threshold = reproductive_threshold
         self.reproduction_mode = reproduction_mode
         self._environment, self._position, self.d_size = None, None, 2
         self.ind_id = self._generate_id(ind_id)
