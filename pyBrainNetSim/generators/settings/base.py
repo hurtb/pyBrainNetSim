@@ -21,6 +21,8 @@ NODE_PROPS = {
         'inactive_period': 0,
         'value': 0.,
         'postsyn_signal': 0.,
+        'max_outgoing': {'Generic': None, 'Internal': None, 'Motor': None, 'Sensory': None},
+        'max_incoming': {'Generic': None, 'Internal': None, 'Motor': None, 'Sensory': None},
     },
     'Internal': {
         'node_class': 'Internal',
@@ -39,6 +41,8 @@ NODE_PROPS = {
         'inactive_period': 0,
         'value': 0.,
         'postsyn_signal': 0.,
+        'max_outgoing': {'Generic': None, 'Internal': None, 'Motor': None, 'Sensory': None},
+        'max_incoming': {'Generic': None, 'Internal': None, 'Motor': None, 'Sensory': None},
     },
     'Motor': {
         'node_class': 'Motor',
@@ -57,6 +61,8 @@ NODE_PROPS = {
         'inactive_period': 0,
         'value': 0.,
         'postsyn_signal': 0.,
+        'max_outgoing': {'Generic': 0, 'Internal': 0, 'Motor': 0, 'Sensory': 0},
+        'max_incoming': {'Generic': 1, 'Internal': 1, 'Motor': 0, 'Sensory': 0},
     },
     'Sensory': {
         'node_class': 'Sensory',
@@ -80,6 +86,8 @@ NODE_PROPS = {
         'value': 0.,
         'signal': 0.,
         'postsyn_signal': 0.,
+        'max_outgoing': {'Generic': 1, 'Internal': 1, 'Motor': 0, 'Sensory': 0},
+        'max_incoming': {'Generic': 0, 'Internal': 0, 'Motor': 0, 'Sensory': 0},
     },
 }
 

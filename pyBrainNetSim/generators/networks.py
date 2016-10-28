@@ -4,7 +4,9 @@ from itertools import permutations
 import networkx as nx
 import numpy as np
 import scipy as sp
+import random
 from pyBrainNetSim.generators.settings.base import *
+from pyBrainNetSim.models.network import NeuralNetData
 
 NODE_PROPERTY_NAMES = [
     'name',
@@ -46,8 +48,10 @@ def __chk_rand(vals, default):
             num = numb
         elif numb is None:
             num = default.rvs()
-        else:
+        elif callable(getattr(numb, 'rvs', None)):
             num = numb.rvs()
+        else:
+            num = numb
         return num
     if isinstance(vals, (list, np.ndarray)):
         nums = [chk_num(val) for val in vals]
@@ -73,10 +77,10 @@ class Properties(object):
     @staticmethod
     def _chk_rand(value):
         def check_num(numb):
-            if isinstance(numb, (int, float, str, types.FunctionType, types.NoneType)):
-                num = numb
-            else:
+            if callable(getattr(numb, 'rvs', None)):
                 num = numb.rvs()
+            else:
+                num = numb
             return num
         if isinstance(value, (list, np.ndarray)):
             nums = [check_num(val) for val in value]
@@ -392,7 +396,7 @@ class SensorMoverProperties():
         self.motor = motor if motor is not None else MotorNodeProperties()
         self.weights = weights if weights is not None else EdgeProperties()
 
-    def sample(self, *args, **kwargs):
+    def sample(self, pruning_method='proximity', *args, **kwargs):
         """
         Generate a dict library of the properties of a sensor-mover object. Use this to feed simulations.
         :param args: to be used in the future
@@ -404,6 +408,7 @@ class SensorMoverProperties():
         motor_nodes = self.motor.sample()
         nodes = internal_nodes + sensory_nodes + motor_nodes
         weights = self.weights.sample(nodes)
+        weights = self.prune_edges(nodes, weights, pruning_method=pruning_method)  # apply the max_incoming/max_outgoing
         return nodes, weights
 
     def reset_props(self):
@@ -412,9 +417,60 @@ class SensorMoverProperties():
         self.motor.reset_props()
         self.weights.reset_props()
 
-    def create_digraph(self, *args, **kwargs):
-        nodes, weights = self.sample(*args, **kwargs)
+    def create_digraph(self, nodes=None, edges=None, *args, **kwargs):
+        if not nodes or not edges:
+            nodes, edges = self.sample(*args, **kwargs)
         G = nx.DiGraph()
         G.add_nodes_from(nodes)
-        G.add_weighted_edges_from(weights)
+        G.add_weighted_edges_from(edges)
         return G
+
+    def __list_to_dict(self, v):
+        return {nid: val for nid, val in v}
+
+    def __edge_list_to_dict(self, lst):
+        o = {}
+        for nf, nt, val in lst:
+            if nf in o:
+                o[nf].update({nt: {'weight': val}})
+            else:
+                o.update({nf: {nt: {'weight': val}}})
+        return o
+
+    def prune_edges(self, nodes, edges, pruning_method='furthest_proximity'):
+        """`prune_edges` is a method for capping the outgoing/incoming edges of each node according to the
+        `'max_incoming'` and `'max_outgoing'` properties for a given `'node_class'` These attributes are prescribed in
+        the input each node distribution, or as defaulted in `settings.base.NODE_PROPS[group_name]`. The method works
+        via:
+        1. Loop through nodes
+        2. Get a list of incoming/outgoing nodes by 'node_class'
+        3. For each of those lists, prune the incoming/outgoing node edges accordingly
+        :param nodes: list of tuple, where each tuple is (node_id, property dict)
+        :param edges: tuple list, where each tuple is (node from, node to, edge weight)
+        :param pruning_method: 'furthest_proximity' - prunes edges that are outside the maximum allowed nodes, 'random'
+        :return: edges, as above.
+        """
+        G = NeuralNetData(self.create_digraph(nodes=nodes, edges=edges))
+        nodes = self.__list_to_dict(nodes)
+        edges = self.__edge_list_to_dict(edges)
+        for n_id, n_props  in nodes.iteritems():
+            for n_class, val in n_props['max_outgoing'].iteritems():
+                nc = G.nodes(node_class=n_class)
+                if not isinstance(val, (int, float)) or len(nc) == 0:
+                    continue
+                prune_nid = G.get_n_neighbors_by(n_id, n=len(nc)-val, node_class=n_class, method=pruning_method,
+                                                 connected=True)
+                for pid in prune_nid:
+                    if pid in edges[n_id]:
+                        edges[n_id][pid]['weight'] = 0.
+            for n_class, val in n_props['max_incoming'].iteritems():
+                nc = G.nodes(node_class=n_class)
+                if not isinstance(val, (int, float)) or len(nc) == 0:
+                    continue
+                prune_nid = G.get_n_neighbors_by(n_id, n=len(nc)-val, node_class=n_class, method=pruning_method,
+                                                 connected=True)
+                for pid in prune_nid:
+                    if pid in edges and n_id in edges[pid]:
+                        edges[pid][n_id]['weight'] = 0.
+        edges = [(nf, nt, attr['weight']) for nf in edges.keys() for nt, attr in edges[nf].iteritems()]
+        return edges

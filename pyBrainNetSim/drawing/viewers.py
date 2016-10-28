@@ -84,7 +84,7 @@ def draw_networkx(G, layout='by_position', ax=None, max_e=None, plot_active=True
             continue
         node_pos, node_colors, node_shape, node_size, edge_width = _get_node_plot_props(G, node_class, max_energy=max_e)
         nx.draw_networkx_nodes(G.subgraph(G.nodes(node_class)).copy(), node_pos,  # Draw nodes
-                               node_color=node_colors, node_shape=node_shape, node_size=node_size, ax=ax)
+                               node_color=node_colors, node_shape=node_shape, node_size=node_size, ax=ax, **kwargs)
     node_pos, node_colors, node_shape, node_size, edge_width = _get_node_plot_props(G, max_energy=max_e)
     nx.draw_networkx_edges(G, node_pos, width=edge_width, alpha=0.2, ax=ax)  # draw edges
 

@@ -6,7 +6,10 @@ Created on Sat Jan 23 16:40:51 2016
 """
 import networkx as nx
 import numpy as np
+from scipy.spatial import distance
 import pandas as pd
+import operator
+import random
 
 
 class NeuralNetData(nx.DiGraph):
@@ -196,6 +199,36 @@ class NeuralNetData(nx.DiGraph):
         w = nx.get_edge_attributes(self, 'weight')
 
         return [f_id for f_id, t_id in w.iterkeys() if t_id == to_nid]
+
+    def distance_to(self, node_id, connected=True, node_class=None):
+        """Return a dict of the euclidian distance to other nodes from node_id"""
+        d = {}
+        for n_id, props in self.node.iteritems():
+            if n_id != node_id and (self.has_edge(node_id, n_id) or not connected) and \
+                    (not node_class or props['node_class'] == node_class):
+                d.update({n_id: np.linalg.norm(self.node[node_id]['pos'] - props['pos'])})
+        return d
+
+    def closest_neighbors_by_pos(self, node_id, connected=True, node_class=None):
+        return sorted(self.distance_to(node_id=node_id, node_class=node_class, connected=connected).items(),
+                      key=operator.itemgetter(1))
+
+    def get_n_neighbors_by(self, node_id, n=None, method='closest_proximity', node_class=None, connected=True):
+        if not isinstance(n, (int, float)):
+            n = len(self.node)
+        if method == 'closest_proximity':
+            d = self.closest_neighbors_by_pos(node_id, connected=connected, node_class=node_class)[:n]
+            nodes = [nid for nid, v in d]
+        elif method == 'furthest_proximity':
+            d = self.closest_neighbors_by_pos(node_id, connected=connected, node_class=node_class)
+            d.reverse()
+            nodes = [nid for nid, v in d[:n]]
+        elif method == 'random':
+            nc = self.nodes(node_class=node_class)
+            nodes = random.sample(nc, n)
+        else:
+            nodes = self.nodes(node_class=node_class)[:n]
+        return nodes
 
     def __repr__(self):
         return "t: %s\nTotal Nodes: %d\nPre: %s\nInactive: %s\nPost: %s" \
