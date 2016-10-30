@@ -16,7 +16,6 @@ import networkx as nx
 from scipy.spatial import ConvexHull
 import pandas as pd
 import pyBrainNetSim.models.network
-import pyBrainNetSim.drawing.layouts as lyt
 import pyBrainNetSim
 import pyBrainNetSim.utils as utils
 
@@ -74,11 +73,8 @@ class vTrajectory(LineCollection):
 def draw_networkx(G, layout='by_position', ax=None, max_e=None, plot_active=True, active_node_color=None, **kwargs):
     internal_color, internal_ecolor, internal_alpha = '#FCDC79', '#C79500', 0.5
     overall_color, overall_ecolor, overall_alpha = '#A1A1A1', '#050505', 0.2
-
     if ax is None:
         fig, ax = plt.subplots()
-    if layout == 'grid':  # rarely use, the 'pos' attribute is defined
-        G = lyt.grid_layout(G)
     for node_class in RENDER_NODE_PROPS.iterkeys():
         if node_class in ['Default', 'Active', 'Dead', 'Firing']:
             continue
@@ -87,7 +83,6 @@ def draw_networkx(G, layout='by_position', ax=None, max_e=None, plot_active=True
                                node_color=node_colors, node_shape=node_shape, node_size=node_size, ax=ax, **kwargs)
     node_pos, node_colors, node_shape, node_size, edge_width = _get_node_plot_props(G, max_energy=max_e)
     nx.draw_networkx_edges(G, node_pos, width=edge_width, alpha=0.2, ax=ax)  # draw edges
-
     i_subg = G.subgraph(G.nodes('Internal'))
     m_subg = G.subgraph(G.nodes('Motor'))
     s_subg = G.subgraph(G.nodes('Sensory'))
@@ -226,35 +221,10 @@ def pcolormesh_edge_changes(sim_net, initial_time=0, final_time=-1, ax=None, as_
     return ax
 
 
-# def _get_net_data(sim_net):
-#     if isinstance(sim_net, pyBrainNetSim.models.world.Individual):
-#         num_neurons = len(sim_net.internal.simdata)
-#         row = num_neurons + at_time if at_time < 0 else at_time
-#         graph = sim_net.internal.simdata[row]
-#         my_title = "%s Synapse Strength\nt=%d" % (sim_net.ind_id, row)
-#     elif hasattr(sim_net, 'simdata'):
-#         num_neurons = len(sim_net.simdata)
-#         row = num_neurons + at_time if at_time < 0 else at_time
-#         graph = sim_net.simdata[row]
-#         my_title = "Synapse Strength\nt=%d" % row
-#     elif isinstance(sim_net, pyBrainNetSim.models.network.NeuralNetSimData):
-#         num_neurons = len(sim_net)
-#         row = num_neurons + at_time if at_time < 0 else at_time
-#         graph = sim_net[row]
-#         my_title = "Synapse Strength\nt=%d" % row
-#     elif isinstance(sim_net, nx.DiGraph):
-#         num_neurons = len(sim_net)
-#         row = num_neurons + at_time if at_time < 0 else at_time
-#         graph = sim_net
-#         my_title = "Synapse Strength"
-#     else:
-#         return
-
-
 def _get_node_plot_props(G, node_class=None, max_energy=None, active_node_color=None, active_edge_color=None,
                          dead_node_color=None):
     """
-    `node_`
+    `node_class` - Generic | Internal | Sensory | Motor
     `node_size` - proportional to the sum of the presynaptic connections it makes with other nodes.
     `node_colors` - function of excitatory/inhibitory, energy_value, firing/inactive
 

@@ -7,6 +7,7 @@ import scipy as sp
 import random
 from pyBrainNetSim.generators.settings.base import *
 from pyBrainNetSim.models.network import NeuralNetData
+import pyBrainNetSim.utils as utils
 
 NODE_PROPERTY_NAMES = [
     'name',
@@ -121,15 +122,10 @@ class NodeProperties(Properties):
         self.set_kwargs(**kwargs)
         self.reset_props()
 
-    def sample_old(self, node_id_prefix=None, *args, **kwargs):
-        out = {key: self.sample_field(val, key) for key, val in self.__dict__.iteritems()}
-        out.update({'id': node_id_prefix})
-        return out
-
     def sample(self, *args, **kwargs):
         self.reset_props()
         number_of_nodes = int(self._chk_rand(self.number_of_nodes))
-        self.set_positions(number_of_nodes, self._chk_rand(self.physical_distribution))
+        self.set_positions(number_of_nodes, self._chk_rand(self.physical_distribution['type']), *args, **kwargs)
         nodes = []
         for i in range(number_of_nodes):
             prop = self.get_one_sample()
@@ -157,13 +153,15 @@ class NodeProperties(Properties):
     def evaluate_node_type(self):
         return self.node_type
 
-    def set_positions(self, number_of_nodes, layout):
+    def set_positions(self, number_of_nodes, layout, *args, **kwargs):
         if layout == 'Grid':
-            self._pos = self.get_grid_positions(number_of_nodes)
+            self._pos = self.get_grid_positions(number_of_nodes, *args, **kwargs)
         elif layout == 'ystack':
-            self._pos = self.get_ystack_positions(number_of_nodes)
+            self._pos = self.get_ystack_positions(number_of_nodes, *args, **kwargs)
         elif layout == 'xstack':
-            self._pos = self.get_xstack_positions(number_of_nodes)
+            self._pos = self.get_xstack_positions(number_of_nodes, *args, **kwargs)
+        elif layout == 'by_direction':
+            self._pos = self.get_bydirection_positions(number_of_nodes, *args, **kwargs)
 
     def reset_props(self):
         self._number_of_node_types = len(self._node_type_acceptable)
@@ -176,26 +174,41 @@ class NodeProperties(Properties):
         self._initialized = True
         self._i = 0
 
-    @staticmethod
-    def get_grid_positions(num_neurons):
-        mylen = np.ceil(np.sqrt(num_neurons)) + 1
-        x, y = np.mgrid[1:mylen:1, 1:mylen:1]
-        i_pos = np.vstack([x.ravel(), y.ravel()]).T
-        return i_pos
+    def get_grid_positions(self, num_neurons, *args, **kwargs):
+        half_grid_size = np.round(self.physical_distribution['size'] / 2.)
+        mylen = np.ceil(np.sqrt(num_neurons))
+        x, y = np.meshgrid(np.linspace(-half_grid_size, half_grid_size, num=mylen),
+                           np.linspace(-half_grid_size, half_grid_size, num=mylen))
+        pts = np.vstack([x.ravel(), y.ravel()]).T
+        return pts
 
     @staticmethod
-    def get_ystack_positions(number_of_nodes):
-        pos = []
-        for i in range(number_of_nodes):
-            pos.append([0., i + 1.])
-        return np.array(pos)
+    def get_ystack_positions(number_of_nodes, *args, **kwargs):
+        return np.array([[0., i + 1.] for i in range(number_of_nodes)])
 
     @staticmethod
-    def get_xstack_positions(number_of_nodes):
+    def get_xstack_positions(number_of_nodes, *args, **kwargs):
+        return np.array([[i + 1., 0.] for i in range(number_of_nodes)])
+
+    def get_bydirection_positions(self, number_of_nodes, *args, **kwargs):
         pos = []
-        for i in range(number_of_nodes):
-            pos.append([i + 1., 0.])
-        return np.array(pos)
+        if 'existing_points' in kwargs:
+            pts = np.array([p['pos'] for i, p in kwargs['existing_points']])
+        else:
+            return self.get_xstack_positions(number_of_nodes)  # temporary
+        c = utils.centroid(pts)
+        mx = np.max(pts, axis=0)
+        mn = np.min(pts, axis=0)
+        mxdist = np.max(mx-mn)
+        offset = self._chk_rand(self.physical_distribution['offset'])
+        extra = self._chk_rand(self.physical_distribution['extra_distance'])
+        for d in self.direction:  # loop through each direction
+            extra_dim = np.zeros(len(d) + 1)
+            extra_dim[-1] = 1.
+            ortho = np.cross(d, extra_dim)[:len(d)]
+            p = c + (mxdist + extra) * np.array(d) + offset * ortho
+            pos.append(p)
+        return pos
 
     def __repr__(self):
         str = ""
@@ -208,33 +221,6 @@ class InternalNodeProperties(NodeProperties):
     node_class = 'Internal'
     _node_id_prefix = 'I'
     _node_type_acceptable = ['E', 'I']
-
-   # TO DELETE
-    # def __init__(self, name=None, *args, **kwargs):
-    #     super(InternalNodeProperties, self).__init__(name=name, *args, **kwargs)
-    #     print "internal: %s" %self.__class__.my_node_class
-        # self.node_class = INTERNAL_NODE_CLASS
-        # self.number_of_nodes = INTERNAL_NUMBER_OF_NODES
-        # self.excitatory_to_inhibitory = INTERNAL_EXCIT_TO_INHIB
-        # self.physical_distribution = INTERNAL_PHYSICAL_DISTRIBUTION
-        # self.value = INTERNAL_VALUE
-        # self.energy_value = INTERNAL_ENERGY
-        # self.energy_consumption = MOTOR_ENERGY_CONSUMPTION
-        # self.energy_dynamics = INTERNAL_ENERGY_DYNAMICS
-        # self.threshold = INTERNAL_THRESHOLD
-        # self.threshold_change_fxn = INTERNAL_THRESHOLD_FXN
-        # self.spontaneity = INTERNAL_SPONTANEITY
-        # self.inactive_period = INTERNAL_INACTIVE_PERIOD
-        # self.identical = INTERNAL_IDENTICAL
-        # self.identical_within_type = INTERNAL_IDENTICAL_WITHIN_CLASS
-
-        # self.set_kwargs(**NODE_PROPS['Internal'])  # First set default properties
-
-        # self._ignore_sample.extend(['number_of_nodes', 'physical_distribution', 'excitatory_to_inhibitory'])
-        # self._node_id_prefix = 'I'
-
-        # self.set_kwargs(**kwargs) # Then set kwargs input properties
-        # self.reset_props()
 
     def evaluate_node_type(self):
         return 'E' if self.sample_field(sp.stats.bernoulli.rvs(self.excitatory_to_inhibitory)) > .5 else 'I'
@@ -250,32 +236,8 @@ class MotorNodeProperties(NodeProperties):
     _node_id_prefix = 'M'
     _node_type_acceptable = ['E']
 
-    # TO DELETE
-    # def __init__(self, name=None, *args, **kwargs):
-    #     super(MotorNodeProperties, self).__init__(name, *args, **kwargs)
-    #     self.number_of_nodes = MOTOR_NUMBER_OF_NODES
-    #     self.force_direction = MOTOR_DIRECTION
-    #     self.node_class = MOTOR_NODE_CLASS
-    #     self.node_type = MOTOR_NODE_TYPE
-    #     self.energy_value = MOTOR_ENERGY
-    #     self.energy_consumption = MOTOR_ENERGY_CONSUMPTION
-    #     self.energy_dynamics = MOTOR_ENERGY_DYNAMICS
-    #     self.threshold = MOTOR_THRESHOLD
-    #     self.threshold_change_fx = MOTOR_THRESHOLD_FXN
-    #     self.spontaneity = MOTOR_SPONTANEITY
-    #     self.inactive_period = MOTOR_INACTIVE_PERIOD
-    #     self.value = MOTOR_VALUE
-    #     self.identical = MOTOR_IDENTICAL
-    #     self._node_types_acceptable = ['E']
-    #     # self._ignore_sample.extend(['force_direction'])
-    #     self._node_id_prefix = 'M'
-    #     self.physical_distribution = 'xstack'
-    #
-    #     self.set_kwargs(**kwargs)
-    #     self.reset_props()
-
     def extra_props(self, *args, **kwargs):
-        return {'force_direction': np.array(self.force_direction[self._i])}
+        return {'force_direction': np.array(self.direction[self._i])}
 
 
 class SensoryNodeProperties(NodeProperties):
@@ -284,37 +246,8 @@ class SensoryNodeProperties(NodeProperties):
     _node_id_prefix = 'S'
     _node_type_acceptable = ['E', 'I']
 
-    # TO DELETE
-    # def __init__(self, name=None, *args, **kwargs):
-    #     super(SensoryNodeProperties, self).__init__(name, *args, **kwargs)
-    #     self.number_of_nodes = SENSORY_NUMBER_OF_NEURONS
-    #     self.sensor_direction = [(1., 0.), (-1., 0.), (0., 1.), (0., -1.)]
-    #     self.node_class = SENSORY_NODE_CLASS
-    #     self.node_type = SENSORY_NODE_TYPE
-    #     self.energy_value = SENSORY_ENERGY
-    #     self.energy_consumption = SENSORY_ENERGY_CONSUMPTION
-    #     self.energy_dynamics = SENSORY_ENERGY_DYNAMICS
-    #     self.inactive_period = SENSORY_INACTIVE_PERIOD
-    #     self.threshold = SENSORY_THRESHOLD
-    #     self.threshold_change_fxn = SENSORY_THRESHOLD_FXN
-    #     self.spontaneity = SENSORY_SPONTANEITY
-    #     self.stimuli_sensitivity = SENSORY_SENSITIVITY
-    #     self.stimuli_max = SENSORY_MAX
-    #     self.stimuli_min = SENSORY_MIN
-    #     self.sensory_mid = STIMULI_MID  # inflection point
-    #     self.stimuli_fxn = SENSORY_TO_STIMULI_FXN
-    #     self.value = SENSORY_VALUE0
-    #     self.signal = SENSORY_SIGNAL0
-    #     self.identical = SENSORY_IDENTICAL
-    #     # self._ignore_sample.extend(['sensor_direction'])
-    #     self._node_id_prefix = 'S'
-    #     self.physical_distribution = 'ystack'
-    #
-    #     self.set_kwargs(**kwargs)
-    #     self.reset_props()
-
     def extra_props(self, *args, **kwargs):
-        return {'sensor_direction': np.array(self.sensor_direction[self._i])}
+        return {'sensor_direction': np.array(self.direction[self._i])}
 
 
 class EdgeProperty(Properties):
@@ -372,7 +305,6 @@ class EdgeProperties(Properties):
     def sample(self, node_list):
         w = []  # list of tuples [(nID1, nID2, weight_value), (nID1, ...)
         for n in list(permutations(node_list, 2)):
-            # TODO: get existing number of incoming and outgoing edges before adding another
             w.append((n[0][0], n[1][0], self.edges[n[0][1]['node_class']][n[1][1]['node_class']].sample()['weight']))
         return w
 
@@ -404,8 +336,8 @@ class SensorMoverProperties():
         :return: dict
         """
         internal_nodes = self.internal.sample()
-        sensory_nodes = self.sensors.sample()
-        motor_nodes = self.motor.sample()
+        sensory_nodes = self.sensors.sample(existing_points=internal_nodes)
+        motor_nodes = self.motor.sample(existing_points=internal_nodes)
         nodes = internal_nodes + sensory_nodes + motor_nodes
         weights = self.weights.sample(nodes)
         weights = self.prune_edges(nodes, weights, pruning_method=pruning_method)  # apply the max_incoming/max_outgoing
