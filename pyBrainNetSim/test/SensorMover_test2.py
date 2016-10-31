@@ -11,7 +11,7 @@ sys.path.append('../../')
 from pyBrainNetSim.models.individuals import SensorMover
 from pyBrainNetSim.models.world import Environment, Attractor
 from pyBrainNetSim.solvers.solver import SensorMoverEvolutionarySolver
-from pyBrainNetSim.generators.networks import SensorMoverProperties
+from pyBrainNetSim.generators.network import SensorMoverProperties
 
 
 class EvolutionarySolverTest(SensorMoverEvolutionarySolver):

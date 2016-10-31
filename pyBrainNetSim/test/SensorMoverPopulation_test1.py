@@ -8,7 +8,7 @@ Created on Sat Apr 09 14:48:56 2016
 import sys
 sys.path.append('../../')
 import numpy as np
-from pyBrainNetSim.generators.networks import SensorMoverProperties, \
+from pyBrainNetSim.generators.network import SensorMoverProperties, \
  SensoryNodeProperties, InternalNodeProperties, \
  EdgeProperties, MotorNodeProperties
 from pyBrainNetSim.models.network import NeuralNetData

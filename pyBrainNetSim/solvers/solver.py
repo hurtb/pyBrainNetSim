@@ -1,4 +1,4 @@
-from pyBrainNetSim.generators.networks import SensorMoverProperties
+from pyBrainNetSim.generators.network import SensorMoverProperties
 from pyBrainNetSim.models.individuals import SensorMover
 
 

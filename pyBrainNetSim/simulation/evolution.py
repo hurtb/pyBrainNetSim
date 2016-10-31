@@ -1,5 +1,5 @@
 
-from pyBrainNetSim.generators.networks import SensorMoverProperties
+from pyBrainNetSim.generators.network import SensorMoverProperties
 from pyBrainNetSim.models.individuals import SensorMover
 from pyBrainNetSim.simulation.simnetwork import HebbianNetworkBasic
 from pyBrainNetSim.drawing.viewers import draw_networkx

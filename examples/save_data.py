@@ -2,7 +2,7 @@ import matplotlib as mpl
 import matplotlib.pyplot as plt
 import networkx as nx
 import pyBrainNetSim.models.world as world
-import pyBrainNetSim.generators.networks as rnd
+import pyBrainNetSim.generators.network as rnd
 import pyBrainNetSim.drawing.viewers as vis
 import pyBrainNetSim.simulation.evolution as evo
 from pyBrainNetSim.drawing import animations as ani

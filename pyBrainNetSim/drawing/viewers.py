@@ -28,8 +28,10 @@ RENDER_NODE_PROPS = {'Internal': {'shape': 'o', 'min_node_size': 50., 'max_node_
                      'Active': {'shape': 'o', 'min_node_size': 50., 'max_node_size': 300.,
                                 'node_face_color': '#D1D66B', 'node_edge_color': '#D1D66B'},
                      'Dead': {'shape': 'o', 'min_node_size': 50., 'max_node_size': 300.,
-                                'node_face_color': '#D1D66B', 'node_edge_color': '#D1D66B'},
+                                'node_face_color': '#ADADAD', 'node_edge_color': '#D1D66B'},
                      }
+CMAP_DIFF = plt.get_cmap('coolwarm')
+CMAP_EDGE = plt.get_cmap('PuRd')
 
 
 class vTrajectory(LineCollection):
@@ -141,6 +143,7 @@ def pcolormesh_edges(sim_net, at_time=-1, ax=None, **kwargs):
 
     if ax is None:
         fig, ax = plt.subplots()
+    cmap = CMAP_EDGE
     sorted_neuron_names = sorted(graph.nodes())
     x, y = np.meshgrid(range(graph.number_of_nodes() + 1), range(graph.number_of_nodes() + 1))
     x = x - 0.5
@@ -149,8 +152,7 @@ def pcolormesh_edges(sim_net, at_time=-1, ax=None, **kwargs):
     z = np.ma.masked_where(z==0, z)
     # z = z[:-1, :-1]
     z_min, z_max = 0., np.abs(z).max()
-
-    p = ax.pcolormesh(x, y, z, cmap='Reds', vmin=z_min, vmax=z_max)
+    p = ax.pcolormesh(x, y, z, cmap=cmap, vmin=z_min, vmax=z_max)
     ax.set(title=my_title, xlabel="Post-synaptic Neurons", ylabel="Pre-synaptic Neurons",
            xlim=(x.min(), x.max()), ylim=(y.min(), y.max()))
     ax.set_title(my_title, {'fontsize':10})
@@ -158,6 +160,10 @@ def pcolormesh_edges(sim_net, at_time=-1, ax=None, **kwargs):
     ax.set_yticks(range(graph.number_of_nodes()))
     ax.set_xticklabels(sorted_neuron_names, rotation='vertical')
     ax.set_yticklabels(sorted_neuron_names)
+    sorted_index = np.argsort(graph.nodes())
+    nc = _get_node_colors(graph, cmap=CMAP_DIFF, fixed_by_node_type=True)
+    _ = [l.set_color(nc[sorted_index[i]]) for i, l in enumerate(ax.get_xticklabels())]
+    _ = [l.set_color(nc[sorted_index[i]]) for i, l in enumerate(ax.get_yticklabels())]
     ax.set_aspect('equal', adjustable='box')
     # cb = ax.images[-1].colorbar
     # cb.remove()
@@ -204,7 +210,10 @@ def pcolormesh_edge_changes(sim_net, initial_time=0, final_time=-1, ax=None, as_
         z = np.ma.masked_where(z == 0, z)
         z_min = -np.abs(z).max() if vmin is None else vmin
         z_max = np.abs(z).max() if vmax is None else vmax
-    p = ax.pcolormesh(x, y, z, cmap='coolwarm', vmin=z_min, vmax=z_max)
+    cmap = CMAP_DIFF
+    # cmap.set_bad(color='#C9C9C9')
+    # cmap.set_under(color='k')
+    p = ax.pcolormesh(x, y, z, cmap=cmap, vmin=z_min, vmax=z_max)
     plt.gca()
     ax.set(title=my_title, xlabel="Post-synaptic Neurons", ylabel="Pre-synaptic Neurons",
            xlim=(x.min(), x.max()), ylim=(y.min(), y.max()))
@@ -213,6 +222,10 @@ def pcolormesh_edge_changes(sim_net, initial_time=0, final_time=-1, ax=None, as_
     ax.set_yticks(range(len(initial_net.nodes())))
     ax.set_xticklabels(sorted_neuron_names, rotation='vertical', ha='center')
     ax.set_yticklabels(sorted_neuron_names, va='center')
+    sorted_index = np.argsort(final_net.nodes())
+    nc = _get_node_colors(final_net, CMAP_DIFF, fixed_by_node_type=True)
+    _ = [l.set_color(nc[sorted_index[i]]) for i, l in enumerate(ax.get_xticklabels())]
+    _ = [l.set_color(nc[sorted_index[i]]) for i, l in enumerate(ax.get_yticklabels())]
     ax.set_aspect('equal', adjustable='box')
     # if as_pct:
     #     plt.gcf().colorbar(p, ax=ax, format='%d%%')
@@ -229,7 +242,7 @@ def _get_node_plot_props(G, node_class=None, max_energy=None, active_node_color=
     `node_colors` - function of excitatory/inhibitory, energy_value, firing/inactive
 
     """
-    cm = plt.get_cmap('coolwarm')  # Shade from red (inhibitory) to green (excitatory)
+    cm = CMAP_DIFF  # Shade from red (inhibitory) to green (excitatory)
     nodes = G.nodes(node_class)
     adj_matrix = nx.adjacency_matrix(G)
     node_pos = nx.get_node_attributes(G.subgraph(nodes), 'pos')
@@ -258,10 +271,19 @@ def _get_node_plot_props(G, node_class=None, max_energy=None, active_node_color=
     return node_pos, node_colors, node_shape, node_size, edge_width
 
 
-def _get_node_colors(G, cmap, node_class=None, max_energy=None, firing_node_color=None, dead_node_color=None):
+def _get_node_colors(G, cmap, node_class=None, max_energy=None, firing_node_color=None, dead_node_color=None,
+                     fixed_by_node_type=False):
     """Color node by: node_class (E or I), firing or not (edgecolor), """
     if node_class in ['Active', 'Dead', 'Firing']:
         return []
+    if fixed_by_node_type:
+        node_color = []
+        for nid, props in G.node.iteritems():
+            c = CMAP_DIFF(255) if props['node_type'] == 'E' else CMAP_DIFF(0)
+            if nid in G.dead_nodes:
+                c = RENDER_NODE_PROPS['Dead']['node_face_color']
+            node_color.append(c)
+        return node_color
     if node_class is not None:
         node_colors = np.array([-float(G.node[n_id]['energy_value']) if G.node[n_id]['node_type'] == 'I'
                                 else float(G.node[n_id]['energy_value']) for n_id in G.nodes(node_class)])

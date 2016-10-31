@@ -78,10 +78,7 @@ class SimNetBase(object):
         self.synapse_plasticity(nd)  # Plasticity
         self.migration(nd)  # Migrate
         self.birth_death(nd)  # Neuron Birth
-        self.simdata[-1].dead_nodes = self.simdata[-2].dead_nodes
-        self.simdata[-1].presyn_nodes = self.simdata[-2].postsyn_nodes
-        self.t += self.dt  # step forward in time
-        self.n += 1
+        self.update()
 
     def add_energy(self, amount):
         amount_per_neuron = np.floor(float(amount) / self.simdata[-1].number_of_nodes())
@@ -137,6 +134,15 @@ class SimNetBase(object):
             for nid in nn.node.iterkeys():
                 nn.node[nid][attr] *= factor
 
+    def update(self):
+        self.simdata[-1].dead_nodes = self.simdata[-2].dead_nodes
+        for nid in self.simdata[-1].dead_nodes:
+            for onid in self.simdata[-1].out_edges(nid):
+                self.simdata[-1].edge[nid][onid[1]]['weight'] = 0.
+        self.simdata[-1].presyn_nodes = self.simdata[-2].postsyn_nodes
+        self.t += self.dt  # step forward in time
+        self.n += 1
+
     def draw_networkx(self, t=None, axs=None):
         """Draw networkx graphs for time points indicated"""
         max_cols, max_axs, color, alpha = 5, 20, '#D9F2FA', 0.5
@@ -165,7 +171,6 @@ class SimNet(SimNetBase):
     
     def add_spontaneous(self, ng):
         """Fxn to setup spontaneous firing."""
-        # ng.spont_nodes = ng.vector_to_nodeIDs(self.generate_spontaneous(ng))
         ng.spont_signal = self.generate_spontaneous(ng)
 
     def find_inactive(self, ng):

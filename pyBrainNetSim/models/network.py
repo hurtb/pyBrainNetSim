@@ -6,7 +6,6 @@ Created on Sat Jan 23 16:40:51 2016
 """
 import networkx as nx
 import numpy as np
-from scipy.spatial import distance
 import pandas as pd
 import operator
 import random
@@ -15,8 +14,7 @@ import random
 class NeuralNetData(nx.DiGraph):
     """
     Data structure holding the neural network data state. This is a networkx
-    graph with added features for a real temporal neural network
-    
+    graph with added features for a real temporal neural network.
     """
     def __init__(self, network=None, time=None, inactive_node=None, pre_fire=None, *args, **kwargs):
         super(NeuralNetData, self).__init__(network, *args)

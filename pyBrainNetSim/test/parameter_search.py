@@ -11,7 +11,7 @@ sys.path.append('../../')
 from pyBrainNetSim.models.individuals import SensorMover
 from pyBrainNetSim.models.world import Environment, Attractor
 from pyBrainNetSim.solvers.solver import SensorMoverEvolutionarySolver
-from pyBrainNetSim.generators.networks import InternalNodeProperties, MotorNodeProperties, SensoryNodeProperties
+from pyBrainNetSim.generators.network import InternalNodeProperties, MotorNodeProperties, SensoryNodeProperties
 from scipy.stats import norm, binom, randint, poisson, uniform
 
 INTERNAL = {'number': randint(low=10, high=40),

@@ -139,7 +139,6 @@ class Environment(object):
                 points = np.array(utils.points_to_segments(trajectory))
                 lines = vTrajectory(points)
                 lines.text.set_fontsize(9)
-                # print lines.get_segments()
                 ax.scatter(*trajectory[-1], s=15, marker='s', c='r', edgecolors='w', alpha=0.9)
                 ax.add_collection(lines)
         self._format_plot(ax)
@@ -161,8 +160,6 @@ class Environment(object):
         else:
             pos = position
         return pos
-
-    # def copy_
 
     @property
     def positions(self):
