@@ -12,7 +12,6 @@ from pyBrainNetSim.drawing.viewers import vTrajectory
 from scipy.spatial.distance import euclidean
 from scipy.stats import randint
 from scipy.ndimage import zoom
-from pyBrainNetSim.utils import cart2pol
 import pyBrainNetSim.utils as utils
 import copy
 import random
@@ -48,9 +47,12 @@ class Environment(object):
         else:
             self.deltas = np.ones(self.d_size)
 
-        slices = [slice(self.origin[i], self.max_point[i]+self.deltas[i], self.deltas[i]) for i in range(self.d_size)]
-        self.c_grid = np.mgrid[slices]  # cartesian grid
-
+        # self.slices = [slice(self.origin[i], self.max_point[i]+self.deltas[i], self.deltas[i])
+        #                for i in range(self.d_size)]
+        # self.c_grid = np.mgrid[self.slices]  # cartesian grid
+        self.ticks = [np.arange(self.origin[i], self.max_point[i] + self.deltas[i], self.deltas[i])
+                      for i in range(self.d_size)]
+        self.c_grid = np.meshgrid(*self.ticks, sparse=False)
     def add_individual(self, individual):
         if isinstance(individual, Individual):
             self._individuals.update({individual.ind_id: individual})
@@ -343,14 +345,14 @@ class ScalarField(object):
         return _field
 
     def field_at(self, location, source_id=None):
-        indx = self._loc_to_indx(location).astype(np.int)
+        indx = self._loc_to_indx(location)
         _field = 0.
         if self.d_size == 1:
             _field = self.field(source_id)[indx]
         elif self.d_size == 2:
-            _field = self.field(source_id)[indx[0]][indx[1]]
+            _field = self.field(source_id)[indx[1]][indx[0]]
         elif self.d_size == 3:
-            _field = self.field(source_id)[indx[0]][indx[1]][indx[2]]
+            _field = self.field(source_id)[indx[2]][indx[1]][indx[0]]
         return _field
 
     def gradient(self, source_id=None):
@@ -360,7 +362,7 @@ class ScalarField(object):
         return _grad
 
     def gradient_at(self, location, source_id=None):
-        indx = self._loc_to_indx(location).astype(np.int)
+        indx = self._loc_to_indx(location)
         _grad = grad = self.gradient(source_id)
         if self.d_size == 1:
             grad = np.array([_grad[indx]])
@@ -370,8 +372,19 @@ class ScalarField(object):
             grad = np.array([_grad[i][indx[0]][indx[1]][indx[2]] for i in range(len(indx))])
         return grad
 
-    def _loc_to_indx(self, location):
-        return location
+    def _loc_to_indx(self, p):
+        """"Map the cartesian coordinates to closest index"""
+        cg = self.c_grid
+        idx = []
+        if len(cg) == 2:
+            # print "p:%s at:x: %s, y: %s" %(p, np.where(cg[0][0] == p[0]), np.where(cg[1].T[0] == p[1]))
+            # print "y: %s" %np.where(cg[1].T[0] == p[1])
+            idx.append(np.where(cg[0][0] == p[0])[0][0])
+            idx.append(np.where(cg[1].T[0] == p[1])[0][0])
+        else:
+            print '>2 dimensions not implemented'
+        # print np.array(idx, dtype=int)
+        return np.array(idx, dtype=int)
 
 
 class ExponentialDecayScalarField(ScalarField):
@@ -379,6 +392,6 @@ class ExponentialDecayScalarField(ScalarField):
         super(ExponentialDecayScalarField, self).__init__(field_type, c_grid, *args, **kwargs)
         self.field_permeability = field_permeability
 
-    def function(self, location=(0, 0), strength=1):
-        p_grid = cart2pol(self.c_grid, location)
+    def function(self, location=(0, 0), strength=1, *args, **kwargs):
+        p_grid = utils.cart2pol(self.c_grid, x0=location)
         return strength * np.exp(-p_grid[0] * self.field_permeability)

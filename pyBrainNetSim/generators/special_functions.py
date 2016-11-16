@@ -1,5 +1,6 @@
 from numpy import maximum
 from scipy.special import expit
+import numpy as np
 
 
 class StimuliSensitivity(object):
@@ -19,4 +20,4 @@ def linear(e, de):
 
 
 def sigmoid(x, fmin, fmax, sensitivity, x_mid):
-    return (fmax - fmin) * expit(sensitivity * (x - x_mid)) + fmin
+    return (fmax - fmin) * expit(sensitivity * np.log(x/x_mid)) + fmin

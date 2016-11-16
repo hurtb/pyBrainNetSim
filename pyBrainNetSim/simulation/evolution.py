@@ -72,6 +72,7 @@ class SensorMoverPopulationBase(object):
     def sim_time_steps(self, max_iter=10):
         while self.t < max_iter:
             n = 0
+            # print "step: %d" %self.t
             for ind in self.individuals.itervalues():
                 n += 1 if ind.is_living else 0
             trg = ' '.join([ind.ind_id for ind in self.individuals.itervalues() if ind.found_target()])

@@ -53,7 +53,6 @@ class SensorMover(Individual):
         self.move(self._motor_actions(self.internal.simdata[-1]))  # apply motor output
         self.t += 1
         child = self.reproduce(mode=self.reproduction_mode) if self.to_reproduce else None
-
         return child
 
     def sim_time_steps(self, max_iter=10):
@@ -74,6 +73,7 @@ class SensorMover(Individual):
                   if (nAttrDict['node_class'] == 'Sensory')]
         for nID in sn_ids:   # 'Attractor' field value at each sensory position
             pos = self.__filter_pos(self.position + ng.node[nID]['sensor_direction'])
+            # print "pos %s | filtered pos %s" %(self.position + ng.node[nID]['sensor_direction'], pos)
             ng.node[nID]['signal'] = \
                 self.environment.attractor_field_at(pos, field_type='Sensory')
             ng.node[nID]['spontaneity'] = ng.node[nID]['stimuli_fxn'](
@@ -99,7 +99,11 @@ class SensorMover(Individual):
 
     def __filter_pos(self, pos):
         if not self.in_world(pos):
-            pos -= 1.
+            for i, p in enumerate(pos):
+                if p > self.environment.max_point[i]:
+                    pos[i] = self.environment.max_point[i]
+                elif p < self.environment.origin[i]:
+                    pos[i] = self.environment.origin[i]
         return pos
 
     def _update_energy(self, ng):

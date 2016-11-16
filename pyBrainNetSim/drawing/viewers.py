@@ -328,9 +328,13 @@ def plot_node_property_ts(sim_data, kind='vlines', prop='value', neuron_ids=None
             _pts = iax.plot(t, series.values, 'ro--', ms=12, mec='r')
         elif kind == 'vlines':
             _lines = iax.vlines(t, ymin=0, ymax=series.values, colors='r', lw=2)
-        iax.set(ylim=(series.min() - y_l_buff, series.max() + y_u_buff),
+        iax.set(ylim=(series.min() * (1. - y_l_buff), series.max() * (1. + y_u_buff)),
                 xlim=(series.index.min() - xbuff, series.index.max() + xbuff))
         iax.set_ylabel(series.name)
+        # yticks = iax.get_yticks()
+        # print yticks[-1]
+        # yticks[-1] = None
+        # iax.set_yticks(yticks)
         return iax
     xbuff, y_u_buff, y_l_buff = 0.1, 0.2, 0.0
     t = range(len(sim_data))
@@ -383,3 +387,26 @@ def degree_histogram(g, min_weight=0, as_probability=False, ax=None):
     ax.set_xticks(range(int(max(cnts))))
 #    ax.show() # show histogram
     return ax
+
+
+def plot_sensory_node_sensitivity(n, ax=None):
+    """
+
+    :param np: node properties dict, from the NeuralNetwork.edge[node_id].
+    :param ax:
+    :return:
+    """
+    if ax is None:
+        fig, ax = plt.subplots()
+
+    pmax, pmin, kappa, phi_m = n['stimuli_max'], n['stimuli_min'], n['stimuli_sensitivity'], n['sensory_mid']
+    f = n['stimuli_fxn']
+    max_s = 100 * phi_m
+    s = np.logspace(-5, 1, num=200)
+    p = [f(i, pmin, pmax, kappa, phi_m) for i in s]
+    ax.plot(s, p, '.-g')
+    ax.set_xlabel('Sensory Concentration')
+    ax.set_ylabel('Probability of Action Potential')
+    ax.set_xscale('log')
+    return p
+

@@ -44,14 +44,14 @@ def cart2pol(c_grid, x0=(0., 0.)):
     if len(x0) not in [2, 3]:
         x0 = np.zeros(len(_cg))
     for i in range(len(_cg)):
-        _cg[i] = _cg[i] - x0[i]
+        _cg[i] = _cg[i] - x0[-i]
     r = np.sqrt(_cg[0]**2 + _cg[1]**2)
     if len(c_grid) == 2:
         theta = np.arctan2(_cg[1], _cg[0])
         return r, theta
     elif len(c_grid) == 3:
-        theta = np.arctan2(_cg[0], _cg[1])
-        phi = np.arctan2(_cg[0]**2 + _cg[1]**2, _cg[2])
+        theta = np.arctan2(_cg[1], _cg[2])
+        phi = np.arctan2(_cg[0], _cg[1]**2 + _cg[2]**2)
         return r, theta, phi
 
 
