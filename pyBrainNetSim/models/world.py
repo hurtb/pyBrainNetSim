@@ -4,7 +4,6 @@ Created on Sun Jan 17 13:16:58 2016
 
 @author: brian
 """
-import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.colors import BoundaryNorm
 from matplotlib.ticker import MaxNLocator
@@ -12,6 +11,8 @@ from pyBrainNetSim.drawing.viewers import vTrajectory
 from scipy.spatial.distance import euclidean
 from scipy.stats import randint
 from scipy.ndimage import zoom
+import networkx as nx
+import numpy as np
 import pyBrainNetSim.utils as utils
 import copy
 import random
@@ -195,15 +196,22 @@ class Attractor(object):
 class Individual(object):
     
     def __init__(self, environment=None, position=None, ind_id=None, reproduction_cost=0.5, reproductive_threshold=10,
-                 reproduction_mode='asexual', *args, **kwargs):
-        self.parents, self.children, self.generation, self.kin, self.t = [], [], 0, 0, 0.
+                 reproduction_mode='asexual', data_cutoff=None, global_time_born=0, *args, **kwargs):
+        self.parents, self.children, self.generation, self.kin = [], [], 0, 0
+        self._cloned_from, self._not_cloned_from = None, None
+        self.t, self.t_birth = 0, global_time_born
         self.reproduction_cost = reproduction_cost
         self.reproduction_threshold = reproductive_threshold
         self.reproduction_mode = reproduction_mode
-        self._environment, self._position, self.d_size = None, None, 2
+        self._reproduced = False
+        self._environment, self._position, self.d_size, self.data_cutoff = None, None, 2, data_cutoff
         self.ind_id = self._generate_id(ind_id)
         self.set_environment(environment)
         self.set_position(position)
+        self.set_trajectory([self.position.copy()])
+        self.reset_data()
+
+    def reset_data(self):
         self.set_trajectory([self.position.copy()])
 
     def _generate_id(self, ind_id=None, num_chars=4, choices='0123456789'):
@@ -258,13 +266,16 @@ class Individual(object):
             self._position = np.zeros(en.d_size)
 
     @property
+    def age(self):
+        return self.t - self.t_birth
+
+    @property
     def position(self):
         return np.array(self._position)
         
     @property
     def velocity(self):
-        # return np.vstack(([0., 0.], self.trajectory[1:]-self.trajectory[:-1]))
-        return self.trajectory[1:]-self.trajectory[:-1]
+        return np.vstack(([0., 0.], self.trajectory[1:]-self.trajectory[:-1]))
 
     def dist_to(self, target):
         return euclidean(self.position, target)
@@ -277,11 +288,7 @@ class Individual(object):
         return vector
 
     def efficiency(self, *args, **kwargs):
-        """
-        Method to evaluate an objective function. To be overriden.
-        :param to:
-        :return:
-        """
+        """Method to evaluate an objective function. To be overridden."""
         pass
 
     def reproduce(self, mode='asexual', partner=None, new_environment=True, error_rate=0., *args, **kwargs):
@@ -299,6 +306,8 @@ class Individual(object):
         child.generation = self.generation
         child.kin = child._generate_id()
         child.ind_id = "G%d_I%s" % (child.generation, child.kin)
+        child.reset_data()
+        child.t_birth = self.t + 1
         self.children.append(child)
 
         return child
@@ -309,8 +318,39 @@ class Individual(object):
         return child
 
     def _reproduce_sexually(self, partner):
-        child = copy.copy(self)
-        child.parents = [self, partner]
+        """Sexual reproduction between two networks"""
+        inherited_state = -1  # -1 would be most recent
+        network_props = ['num_nodes']
+        node_props = ['threshold', 'energy_consumption', 'spontaneity']
+        # node_props = ['threshold']
+        edge_props = ['weight']
+        child = copy.deepcopy(self)
+        partner.children.append(child)
+        # partner.reproductive_energy_cost = self.reproductive_energy_cost
+        child.parents, child.children = [self, partner], []
+        if np.random.randint(0, 2) == 1:
+            internal_net = copy.deepcopy(self.internal)
+            child._cloned_from, child._not_cloned_from = self, partner
+        else:
+            internal_net = copy.deepcopy(partner.internal)
+            child._cloned_from, child._not_cloned_from = partner, self
+        # print "Kin with %d neurons, copied from net with %d neurons" %(internal_net.simdata[-1].number_of_nodes(), self.internal.simdata[-1].number_of_nodes())
+        child.set_internal_network(copy.deepcopy(internal_net), t0=self.t)
+        child.internal.simdata[inherited_state] = copy.copy(internal_net.simdata[inherited_state])
+
+        choices = np.random.randint(2, size=(2, len(node_props)))  # randomly choose attributes
+        for j, n in enumerate(node_props):
+            p1 = nx.get_node_attributes(self.internal.simdata[inherited_state], n)
+            p2 = nx.get_node_attributes(partner.internal.simdata[inherited_state], n)
+            # add/remove nodal information based on the inherited number of nodes
+            chosen = self if choices[0][j] else partner
+            # print "Using %s(N%d) for %s" %(chosen.ind_id, chosen.internal.simdata[inherited_state].number_of_nodes(), n)
+            utils.set_node_attributes(child.internal.simdata[inherited_state], n, p1 if choices[0][j] else p2)
+
+        for j, e in enumerate(edge_props):
+            p1 = nx.get_edge_attributes(self.internal.simdata[inherited_state], e)
+            p2 = nx.get_edge_attributes(partner.internal.simdata[inherited_state], e)
+            utils.set_edge_attributes(child.internal.simdata[inherited_state], n, p1 if choices[1][j] else p2)
         return child
 
 

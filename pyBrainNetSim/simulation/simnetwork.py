@@ -15,21 +15,22 @@ import matplotlib.patches as patches
 from pyBrainNetSim.models.network import *
 from pyBrainNetSim.drawing.viewers import draw_networkx
 from scipy.stats import uniform
+import copy
 
 
 class SimNetBase(object):
     """
 
     """
-    def __init__(self, t0_network, initial_fire='rand', threshold=0.5,
-                 initial_N=None, prescribed=None, *args, **kwargs):
+    def __init__(self, t0_network, initial_fire='rand', threshold=0.5, initial_n=None, prescribed=None,
+                 data_cutoff=None, data_save_frequency=None, *args, **kwargs):
         self.simdata = []
         self.initial_net = NeuralNetData(t0_network, **kwargs)
-        self.initial_nodes = self.initial_fire(mode=initial_fire, threshold=threshold,
-                                               initial_N=initial_N,
+        self.initial_nodes = self.initial_fire(mode=initial_fire, threshold=threshold, initial_n=initial_n,
                                                prescribed=prescribed)
         self.threshold = threshold
         self.is_initialized = False
+        self.data_cutoff, self.data_save_frequency = data_cutoff, data_save_frequency
         
     def simulate(self, max_iter=5, **kwargs):
         """ Simulation mode of the network."""
@@ -42,12 +43,10 @@ class SimNetBase(object):
         self.t, self.dt, self.n, self.N = t0, dt, 0, max_iter # global time, dt, max iter
         self.T = self.N * self.dt + t0
         self.simdata = NeuralNetSimData(t0=t0)
-        # print initial_network
-        # network = initial_network.simdata[0] if initial_network else self.initial_net.copy()
         self.simdata.append(NeuralNetData(self.initial_net.copy()))
         self.is_initialized = True
 
-    def initial_fire(self, mode='rand', threshold=0.9, rand_N=None, initial_N=0.5, prescribed=None):
+    def initial_fire(self, mode='rand', threshold=0.9, rand_N=None, initial_n=0.5, prescribed=None):
         if mode == 'rand':
             out = np.random.permutation(self.initial_net.nodes())[np.random.rand(self.initial_net.number_of_nodes()) < rand_N]
         elif mode == 'rand_pct_N':
@@ -63,18 +62,17 @@ class SimNetBase(object):
         :param driven_nodes: A way to manually drive certain nodes in the model.
         :return: None
         """
+        self.simdata.append(NeuralNetData(copy.deepcopy(self.simdata[-1]), time=self.t))
+        if self.simdata[-1].is_dead:
+            return
         nd = self.simdata[-1]
-
+        nd.initialize()
         self.add_driven(nd, driven_nodes=driven_nodes) # Externally (forced) action potentials
         self.add_spontaneous(nd)  # add spontaneous firing
         self.find_inactive(nd)  # get potential post-synaptic nodes
         self.integrate_action_potentials(nd)  # integrate action potentials
         self.propagate_action_potentials(nd)  # Combine propagating and spontaneous action potentials
         nd.update_properties()  # update data structures
-        if self.simdata[-1].is_dead:
-            return
-        self.simdata.append(NeuralNetData(self.simdata[-1].copy(), time=self.t))
-        nd = self.simdata[-1]
         self.synapse_plasticity(nd)  # Plasticity
         self.migration(nd)  # Migrate
         self.birth_death(nd)  # Neuron Birth
@@ -124,22 +122,31 @@ class SimNetBase(object):
         """Add/subtract neurons."""        
         pass
 
-    def multiply_value(self, attr, factor=1., node_id=None):
-        nn = self.simdata[-1]
-        if not isinstance(factor, (int, float)):
-            reduction_factor = 1.
+    def multiply_value(self, attr, value=1., time_id=-1, node_id=None):
+        nn = self.simdata[time_id]
+        value = 1. if not isinstance(value, (int, float)) else value
         if node_id in nn:
-            nn[node_id][attr] *= factor
+            nn[node_id][attr] *= value
         else:
             for nid in nn.node.iterkeys():
-                nn.node[nid][attr] *= factor
+                nn.node[nid][attr] *= value
+
+    def add_value(self, attr, value=0., time_id=-1, node_id=None):
+        value = 0. if not isinstance(value, (int, float)) else value
+        if node_id in self.simdata[time_id]:
+            self.simdata[time_id].node[node_id][attr] += value
+        else:
+            for nid, nn in self.simdata[time_id].node.iteritems():
+                self.simdata[time_id].node[nid][attr] += value
 
     def update(self):
-        self.simdata[-1].dead_nodes = self.simdata[-2].dead_nodes
         for nid in self.simdata[-1].dead_nodes:
             for onid in self.simdata[-1].out_edges(nid):
                 self.simdata[-1].edge[nid][onid[1]]['weight'] = 0.
         self.simdata[-1].presyn_nodes = self.simdata[-2].postsyn_nodes
+        if isinstance(self.data_cutoff, (int, float)):
+            if len(self.simdata) > self.data_cutoff:
+                del self.simdata[:(len(self.simdata) - self.data_cutoff)]  # pop the first item in list
         self.t += self.dt  # step forward in time
         self.n += 1
 
@@ -205,7 +212,8 @@ class SimNet(SimNetBase):
         """
         out = []
         for n_id in ng.nodes():
-            smin = ng.node[n_id]['spontaneity']*ng.node[n_id]['threshold']
+            # print n_id, ng.node[n_id]['spontaneity'], ng.node[n_id]['threshold']
+            smin = ng.node[n_id]['spontaneity'] * ng.node[n_id]['threshold']
             smax = smin + 1.
             out.append(uniform(loc=smin, scale=smax).rvs())
         out = np.array(out)
@@ -217,9 +225,9 @@ class SimNet(SimNetBase):
 
 class HebbianNetworkBasic(SimNet):
     def __init__(self, t0_network, initial_fire='rand', threshold=0.5, initial_n=None, prescribed=None,
-                 pos_synapse_growth=0.1, neg_synapse_growth=-0.05, *args, **kwargs):
+                 pos_synapse_growth=0.1, neg_synapse_growth=-0.05, data_cutoff=None, *args, **kwargs):
         super(HebbianNetworkBasic, self).__init__(t0_network, initial_fire='rand', threshold=threshold,
-                 initial_N=None, prescribed=None, *args, **kwargs)
+                 initial_N=None, prescribed=None, data_cutoff=data_cutoff, *args, **kwargs)
         self.pos_synapse_growth = pos_synapse_growth
         self.neg_synapse_growth = neg_synapse_growth
 

@@ -28,22 +28,34 @@ class NeuralNetData(nx.DiGraph):
         self.driven_nodes = []
         self.prop_vector = []
         self.dead_nodes = []
+        self._energy_use = {}
+        self.initialize()
 
     @staticmethod
     def set_default(input_val):
         return [] if input_val is None else input_val
+
+    def initialize(self):
+        self._energy_use = {nid: 0. for nid in self.nodes()}
         
     def update_properties(self):
+        self.dead_nodes = []
         self.__update_props(self.active_nodes, **{'state': 'active'})
         self.__update_props(self.inactive_nodes, **{'state': 'inactive', 'value': 0.})
         self.__update_props(self.postsyn_nodes, **{'state': 'post_fire', 'value': 0.})
         self.__update_props(self.presyn_nodes, **{'state': 'pre_fire', 'value': 1.})
-        for nID in self.presyn_nodes:
-            self.node[nID]['energy_value'] = self.node[nID]['energy_dynamics'](self.node[nID]['energy_value'],
-                                                                               self.node[nID]['energy_consumption'])
-        self.dead_nodes = [nID for nID in self.nodes() if self.node[nID]['energy_value'] <= 0.]
-        for i, nID in enumerate(self.nodes()):
-            self.node[nID]['postsyn_signal'] = self.postsyn_signal[i]
+        for nid in self.postsyn_nodes:
+            self._energy_use[nid] = \
+                self.node[nid]['energy_dynamics'](self.node[nid]['energy_value'], self.node[nid]['energy_consumption'])
+        for i, nid in enumerate(self.nodes()):
+            self.node[nid]['postsyn_signal'] = self.postsyn_signal[i]
+            if self.node[nid]['energy_value'] <= 0.:
+                self.dead_nodes.append(nid)
+                self._energy_use[nid] = 0.
+            else:
+                self._energy_use[nid] += self.node[nid]['energy_dynamics']\
+                    (self.node[nid]['energy_value'] - self._energy_use[nid], self.node[nid]['energy_basal_rate'])
+                self.node[nid]['energy_value'] -= self._energy_use[nid]
 
     def __update_props(self, nIDs, **kwargs):
         if nIDs is None:
@@ -106,9 +118,12 @@ class NeuralNetData(nx.DiGraph):
         return self.nodeIDs_to_vector(self.postsyn_nodes)
 
     @property
+    def num_nodes_fired(self):
+        return self.postsyn_vector.sum()
+
+    @property
     def spont_vector(self):
         return self.spont_signal
-        # return self.nodeIDs_to_vector(self.spont_nodes)
 
     @property
     def driven_vector(self):        
@@ -116,11 +131,7 @@ class NeuralNetData(nx.DiGraph):
 
     @property
     def energy_consumption_vector(self):
-        out = np.zeros(self.number_of_nodes())
-        for i, n_id in enumerate(self.nodes()):
-            if n_id in self.postsyn_nodes:
-                out[i] = self.node[n_id]['energy_consumption']
-        return out
+        return np.array([self._energy_use[nid] for nid in self.nodes()])
 
     @property
     def energy_vector(self):
@@ -179,7 +190,6 @@ class NeuralNetData(nx.DiGraph):
         .. math::
             \frac{\sum_{i \in all neurons} energy_i}{\sum_{all neurons} possible energy consumed per time step}
          = total_energy / maxim
-
          """
         return self.eval_min_time_periods_remaining(self.total_energy)
 
@@ -195,7 +205,6 @@ class NeuralNetData(nx.DiGraph):
 
     def incoming_nodes(self, to_nid):
         w = nx.get_edge_attributes(self, 'weight')
-
         return [f_id for f_id, t_id in w.iterkeys() if t_id == to_nid]
 
     def distance_to(self, node_id, connected=True, node_class=None):

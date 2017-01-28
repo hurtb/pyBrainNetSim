@@ -9,6 +9,8 @@ import os
 import matplotlib.pyplot as plt
 import numpy as np
 import pickle
+import random
+import networkx as nx
 
 
 def create_movie(plotter, numberOfFrames, fps=10, fpath='', fname='movie.mp4'):
@@ -74,9 +76,40 @@ def points_to_segments(points):
         segs.append([points[i], points[i+1]])
     return segs
 
+
 def save_pickle(objs, file_name):
     with open(file_name, 'w') as f:
         pickle.dump(objs, f)
 
+
 def centroid(pts):
     return np.mean(pts, axis=0)
+
+
+def set_node_attributes(G, name, props):
+    """Add or remove node properties. Wrapper around networkx method."""
+    # print name
+    # print len(props), props
+    # print "removing:\n%s\n" %([u for u in props.keys() if u not in G.nodes()])
+    _ =  [props.pop(u) for u in props.keys() if u not in G.nodes()]
+    # print props
+    nx.set_node_attributes(G, name, props)  # initial set
+    n_add = [u for u in G.nodes() if u not in props]
+    props = {}
+    # print "adding\n %s\n" % n_add
+    for nid in n_add:
+        props.update({nid: random.choice([v for u, v in G.node.iteritems() if u.startswith(nid[0])])})
+        G.add_node(nid, props)
+    # print nx.get_node_attributes(G, name)
+    # print "----\n--"
+    return G
+
+
+def set_edge_attributes(G, name, props):
+    """Add or remove edge properties. Wrapper around networkx method."""
+    _ = [props.pop(u) for u in props.keys() if u not in G.edge]
+    e_add = [u for u in G.edges() if u not in props]
+    for e in e_add:
+        props.update({e: random.choice(G.edge.values())})
+    nx.set_edge_attributes(G, name, props)
+    return G

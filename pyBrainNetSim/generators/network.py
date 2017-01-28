@@ -125,11 +125,11 @@ class NodeProperties(Properties):
     def sample(self, *args, **kwargs):
         self.reset_props()
         number_of_nodes = int(self._chk_rand(self.number_of_nodes))
-        self.set_positions(number_of_nodes, self._chk_rand(self.physical_distribution['type']), *args, **kwargs)
+        # self.set_positions(number_of_nodes, self._chk_rand(self.physical_distribution['type']), *args, **kwargs)
         nodes = []
         for i in range(number_of_nodes):
             prop = self.get_one_sample()
-            prop.update({'pos':self._pos[self._i]})
+            # prop.update({'pos':self._pos[self._i]})
             prop.update(self.extra_props())
             node_id = '%s%d' % (self._node_id_prefix, self._i)
             nodes.append((node_id, prop))
@@ -202,6 +202,7 @@ class NodeProperties(Properties):
         mxdist = np.max(mx-mn)
         offset = self._chk_rand(self.physical_distribution['offset'])
         extra = self._chk_rand(self.physical_distribution['extra_distance'])
+        print self.direction
         for d in self.direction:  # loop through each direction
             extra_dim = np.zeros(len(d) + 1)
             extra_dim[-1] = 1.
