@@ -1,1 +1,1 @@
-__all__ = ['basic', 'motifs', 'network_properties', 'random', 'random_settings']
+__all__ = ['builtin', 'network', 'special_functions', 'settings']

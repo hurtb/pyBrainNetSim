@@ -18,6 +18,8 @@ import pandas as pd
 import pyBrainNetSim.models.network
 import pyBrainNetSim
 import pyBrainNetSim.utils as utils
+from bokeh.plotting import figure
+from bokeh.models import ColumnDataSource, Range1d, LinearAxis, HoverTool, BoxAnnotation
 
 RENDER_NODE_PROPS = {'Internal': {'shape': 'o', 'min_node_size': 50., 'max_node_size': 200.},
                      'Motor': {'shape': 'h', 'min_node_size': 100., 'max_node_size': 300.},
@@ -72,7 +74,7 @@ class vTrajectory(LineCollection):
         self.text.draw(renderer)
 
 
-def draw_networkx(G, layout='by_position', ax=None, max_e=None, plot_active=True, active_node_color=None, **kwargs):
+def draw_networkx(G, pos=None, ax=None, max_e=None, plot_active=True, active_node_color=None, **kwargs):
     internal_color, internal_ecolor, internal_alpha = '#FCDC79', '#C79500', 0.5
     overall_color, overall_ecolor, overall_alpha = '#A1A1A1', '#050505', 0.2
     if ax is None:
@@ -80,10 +82,12 @@ def draw_networkx(G, layout='by_position', ax=None, max_e=None, plot_active=True
     for node_class in RENDER_NODE_PROPS.iterkeys():
         if node_class in ['Default', 'Active', 'Dead', 'Firing']:
             continue
-        node_pos, node_colors, node_shape, node_size, edge_width = _get_node_plot_props(G, node_class, max_energy=max_e)
-        nx.draw_networkx_nodes(G.subgraph(G.nodes(node_class)).copy(), node_pos,  # Draw nodes
-                               node_color=node_colors, node_shape=node_shape, node_size=node_size, ax=ax, **kwargs)
+        gs = G.subgraph(G.nodes(node_class)).copy()
+        node_pos, node_colors, node_shape, node_size, edge_width = _get_node_plot_props(gs, node_class, max_energy=max_e)
+        nx.draw_networkx_nodes(gs, node_pos, node_color=node_colors, node_shape=node_shape, node_size=node_size, ax=ax, **kwargs)
     node_pos, node_colors, node_shape, node_size, edge_width = _get_node_plot_props(G, max_energy=max_e)
+    if pos is not None:
+        node_pos = pos
     nx.draw_networkx_edges(G, node_pos, width=edge_width, alpha=0.2, ax=ax)  # draw edges
     i_subg = G.subgraph(G.nodes('Internal'))
     m_subg = G.subgraph(G.nodes('Motor'))
@@ -103,9 +107,14 @@ def draw_networkx(G, layout='by_position', ax=None, max_e=None, plot_active=True
     arrow_scale = 1
     for m_id, attr in m_subg.node.iteritems():
         arr_cl = firing_nc if G.is_node_firing(m_id) else 'k'
-        ax.arrow(attr['pos'][0], attr['pos'][1], attr['force_direction'][0] * arrow_scale, attr['force_direction'][1] * arrow_scale,
+        if len(attr['force_direction']) == 1:
+            dx, dy = attr['force_direction'][0], 0.
+        else:
+            dx, dy = attr['force_direction']
+        ax.arrow(attr['pos'][0], attr['pos'][1], dx * arrow_scale, dy * arrow_scale,
                      head_width=1, head_length=np.linalg.norm(attr['force_direction'])/2, fc='k', ec=arr_cl)
 
+    labels = nx.draw_networkx_labels(G, pos=node_pos, font_color='w')
     xlim, ylim = ax.get_xlim(), ax.get_ylim()
     ax.set_xlim([xlim[0]-arrow_scale, xlim[1]+arrow_scale])
     ax.set_ylim([ylim[0] - arrow_scale, ylim[1] + arrow_scale])
@@ -265,7 +274,6 @@ def _get_node_plot_props(G, node_class=None, max_energy=None, active_node_color=
     else:
         node_shape, node_size = RENDER_NODE_PROPS['Default']['shape'], adj_matrix.sum(axis=1)
         min_ns, max_ns = RENDER_NODE_PROPS['Default']['min_node_size'], RENDER_NODE_PROPS['Default']['max_node_size']
-
     node_size = min_ns + (max_ns - min_ns) * (node_size - node_size.min()) / (node_size.max() - node_size.min()) \
         if node_size.max() > node_size.min() else max_ns * np.ones_like(node_size)
     return node_pos, node_colors, node_shape, node_size, edge_width
@@ -331,10 +339,6 @@ def plot_node_property_ts(sim_data, kind='vlines', prop='value', neuron_ids=None
         iax.set(ylim=(series.min() * (1. - y_l_buff), series.max() * (1. + y_u_buff)),
                 xlim=(series.index.min() - xbuff, series.index.max() + xbuff))
         iax.set_ylabel(series.name)
-        # yticks = iax.get_yticks()
-        # print yticks[-1]
-        # yticks[-1] = None
-        # iax.set_yticks(yticks)
         return iax
     xbuff, y_u_buff, y_l_buff = 0.1, 0.2, 0.0
     t = range(len(sim_data))
@@ -410,3 +414,177 @@ def plot_sensory_node_sensitivity(n, ax=None):
     ax.set_xscale('log')
     return p
 
+
+def generate_node_data(G, node_class=None, node_type=None):
+    post_fire_name = 'post_fire'
+    colors = {post_fire_name:'#fcff60', 'E':'#ff9260', 'I':'#60b7ff'}
+    G = G.subgraph(G.nodes(node_class=node_class, node_type=node_type))
+    layout = nx.get_node_attributes(G, 'pos')
+    name, pos = zip(*sorted(layout.items()))
+    p = {'line_color': [], 'fill_color': []}
+    for i in name:
+        p['line_color'].append(colors['I'] if G.node[i]['node_type'] == 'I' else colors['E'])
+        p['fill_color'].append(colors[post_fire_name] if G.node[i]['value'] == 1. else p['line_color'][-1])
+
+    xp, yp = list(zip(*pos))
+    _, thresh = zip(*sorted(nx.get_node_attributes(G, 'threshold').items()))
+    _, ntype = zip(*sorted(nx.get_node_attributes(G, 'node_type').items()))
+    _, nclass = zip(*sorted(nx.get_node_attributes(G, 'node_class').items()))
+    _, energy = zip(*sorted(nx.get_node_attributes(G, 'energy_value').items()))
+    _, state = zip(*sorted(nx.get_node_attributes(G, 'state').items()))
+    _, spontaneity = zip(*sorted(nx.get_node_attributes(G, 'spontaneity').items()))
+    _, value = zip(*sorted(nx.get_node_attributes(G, 'value').items()))
+    _, presyn = zip(*sorted({G.nIx_to_nID[i]: val for i, val in enumerate(G.presyn_vector)}))
+    out = dict(name=name, x=xp, y=yp, threshold=thresh, node_type=ntype, node_class=nclass, energy=energy,
+             state=state, spontaneity=spontaneity, value=value, afferent_signal=None, presyn=presyn,
+             line_color=p['line_color'], fill_color=p['fill_color'] )
+    if node_class == "Sensory":
+        _, signal = zip(*sorted(nx.get_node_attributes(G, 'signal').items()))
+        out.update({'signal': signal})
+
+    return pd.DataFrame(out)
+
+
+def generate_edge_data(G, layout=None):
+    layout = nx.get_node_attributes(G, 'pos') if layout is None else layout
+    d = dict(x=[], y=[], text=[])
+    for u, v, data in G.edges(data=True):
+        d['x'].append([(layout[u][0] + layout[v][0]) / 2.])
+        d['y'].append([(layout[u][1] + layout[v][1]) / 2.])
+        d['text'].append(np.around(data['weight'], decimals=2))
+    return pd.DataFrame(d)
+
+
+def generate_connection_data(G, layout=None, offset=0.):
+    layout = nx.get_node_attributes(G, 'pos') if layout is None else layout
+    ad = dict(x0=[], x1=[], y0=[], y1=[])
+    for u, v, data in G.edges(data=True):
+        ad['x0'].append(layout[u][0])
+        ad['x1'].append(layout[v][0])
+        ad['y0'].append(layout[u][1])
+        ad['y1'].append(layout[v][1])
+    return pd.DataFrame(ad)
+
+
+def draw_network_bokeh(G, fig=None):
+    from bokeh.models import ColumnDataSource, Arrow
+    from bokeh.plotting import show, figure
+    from bokeh.models import HoverTool, LabelSet, Arrow, OpenHead, NormalHead, VeeHead
+    # from bokeh.resources import CDN
+
+    layout = nx.get_node_attributes(G, 'pos')
+    df = generate_node_data(G)
+    ed = generate_edge_data(G, layout)
+    cd = generate_connection_data(G, layout)
+    hover = HoverTool(tooltips=[('name', '@name'), ('class', '@node_class & @node_type'), ('threshold', '@threshold'),
+                                ('energy', '@energy'), ('spontaneity', '@spontaneity')])
+
+    if fig is None:
+        plot = figure(title="Internal Network", tools=['tap', 'pan', hover, 'reset', 'wheel_zoom'])
+    else:
+        plot = fig
+    # Setup data sources
+    sens_source = ColumnDataSource(df[df['node_class'] == 'Sensory'])
+    motor_source = ColumnDataSource(df[df['node_class'] == 'Motor'])
+    int_source = ColumnDataSource(df[df['node_class'] == 'Internal'])
+    nlabel_source = ColumnDataSource(df)
+    elabel_source = ColumnDataSource(ed)
+    connection_source = ColumnDataSource(cd)
+    slabel_source = ColumnDataSource(generate_node_data(G, node_class='Sensory'))
+
+    # Plot
+    plot.segment(x0='x0', y0='y0', x1='x1', y1='y1', source=connection_source, line_width=1, line_color="black",
+                 line_alpha=0.6, legend='Synapses')
+    sens = plot.diamond('x', 'y', source=sens_source, size=20, color='fill_color', legend='Sensory Neuron')
+    moto = plot.square('x', 'y', source=motor_source, size=20, color='fill_color', legend='Motor Neuron')
+    inte = plot.circle('x', 'y', source=int_source, size=20, line_color='line_color', fill_color='fill_color', legend='Internal Neuron')
+    proc_labels = LabelSet(x='x', y='y', text="name", y_offset=10, text_font_size="8pt", text_color="#555555",
+                           source=nlabel_source, text_align='center')
+    sensory_label = LabelSet(x='x', y='y', text="signal", y_offset=-10, text_font_size="8pt", text_color="#555555",
+                           source=slabel_source, text_align='center')
+    plot.add_layout(proc_labels)
+    edge_labels = LabelSet(x='x', y='y', y_offset=10, x_offset=-5, text_font_size="8pt", text_color="#555555",
+                           source=elabel_source, text_align='center')
+    plot.add_layout(edge_labels)
+
+    plot.axis.visible = False
+    plot.xgrid.grid_line_color = None
+    plot.ygrid.grid_line_color = None
+    plot.legend.location = "center_right"
+    # connection_source = None
+    sources = {'Sensory': sens_source, 'Motor': motor_source, 'Internal': int_source, 'nlabel': nlabel_source,
+               'elabel': elabel_source, 'connections': connection_source}
+    return sources, plot
+
+
+def draw_fields(W, sensory_neuron=None, fig=None):
+    sn = sensory_neuron
+    if sensory_neuron:
+        p0, p1, slope, mid = sn['stimuli_min'], sn['stimuli_max'], sn['stimuli_sensitivity'], sn['sensory_mid']
+        fxn = sn['stimuli_fxn']
+    else:
+        from pyBrainNetSim.generators.special_functions import sigmoid
+        p0, p1, slope, mid = 0., 1., 1.5, 0.3
+        fxn = sigmoid
+    max_signal, min_signal = 10, 10 ** -2
+    x1 = np.logspace(np.log10(min_signal), np.log10(max_signal), num=200, base=10.)
+    y1 = [fxn(i, p0, p1, slope, mid) for i in x1]
+    x2 = W.attractor_field(field_type="Sensory")
+    y2 = range(int(W.origin[0]), int(W.max_point[0] + 1))
+    food = W.attractors[W.attractors.keys()[0]]
+
+    # Map data to Bokeh DataSources
+    sensory_source = ColumnDataSource(data=dict(x=x1, y=y1))
+    field_source = ColumnDataSource(data=dict(x0=min_signal * np.ones_like(y2), y0=y2, x1=x2, y1=y2))
+    ind_source = ColumnDataSource(data=dict(xf=[min_signal], yf=[food.position], xi=[None], yi=[None]))
+
+    hover = HoverTool(tooltips=[("Field", "$x"), ("Location", "$y"), ("Sensori-Neural Response", "@y1")])
+
+    f_world = figure(title="Attractor Emmitted Field",
+                     tools=["crosshair,pan,reset,save,wheel_zoom", hover], x_axis_label='Emitted Field',
+                     y_axis_label='Location', y_range=Range1d(W.origin[0], W.max_point[0]),
+                     x_range=Range1d(min_signal, max_signal), x_axis_type="log", toolbar_location="above")
+    f_world.extra_y_ranges = {'y2': Range1d(0., 1)}
+    f_world.add_layout(LinearAxis(y_range_name='y2', axis_label='Strength of Sensori-neural Output'), 'right')
+    f_world.line('x', 'y', source=sensory_source, line_width=3, line_alpha=0.6, y_range_name='y2',
+                 legend='Sensory Encoding')
+    f_world.segment(x0='x0', y0='y0', x1='x1', y1='y1', source=field_source, line_width=2, line_color="green",
+                    line_alpha=0.6, legend='Food Field')
+    f_world.circle('x1', 'y1', source=field_source, size=5, fill_color="green", line_color="green", line_width=2)
+    f_world.circle('xf', 'yf', source=ind_source, size=15, fill_color="green", line_color="green", line_width=1,
+                   legend='Food')
+    # f_world.diamond('xi', 'yi', source=ind_source, size=15, fill_color="orange", line_color="green", line_width=1,
+    #                 legend='Individual')
+    f_world.legend.location = "bottom_right"
+    return f_world
+
+
+def draw_trajectory(I, fig=None):
+    x = [i[0] for i in I.trajectory[:-1]]
+    time = range(len(x))
+    a = [i[0] for i in I.attractor_pos]
+    sg = [i[0][0] for i in I.sensory_gradients[:-1]]
+    sg0 = np.zeros_like(sg)
+    # print len(x), len(t), len(a), len(sg)
+    data = ColumnDataSource(dict(x=x, a=a, t=time, sg=sg, sg0=sg0))
+    W = I.environment
+    hover = HoverTool(tooltips=[("time", "@t"), ("Location", "@x")])
+    if fig is None:
+        plot = figure(title="Trajectory", x_axis_label='Time', y_axis_label='Location',
+                      tools=["crosshair,pan,reset,save,wheel_zoom", hover],
+                      y_range=Range1d(W.origin[0], W.max_point[0]))
+    else:
+        plot = fig
+
+    plot.extra_y_ranges = {'y2': Range1d(-1, 1)}
+    plot.add_layout(LinearAxis(y_range_name='y2', axis_label='Sensory Gradient'), 'right')
+    plot.line('t', 'x', source=data)
+    plot.circle('t', 'x', source=data,  color='blue', legend='Individual Location')
+    plot.line('t', 'a', source=data, color='red')
+    plot.circle('t', 'a', source=data, color='red', legend='Food Location')
+    plot.segment(x0='t', y0='sg0', x1='t', y1='sg', source=data, color='green', legend='Sensory Gradient', y_range_name='y2')
+    plot.legend.location = "bottom_center"
+    if I.is_dead:
+        plot.add_layout(BoxAnnotation(left= I.dead_at, right=t[-1],
+                                      fill_alpha=0.1, line_color='olive', fill_color='DarkGrey'))
+    return plot

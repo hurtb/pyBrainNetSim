@@ -1,9 +1,4 @@
-import viewers as view
-import matplotlib
-# matplotlib.use("Agg")
 import matplotlib.pyplot as plt
-import matplotlib.patches as patches
-import matplotlib.path as path
 import pyBrainNetSim.drawing.viewers as vis
 import matplotlib.animation as animation
 import matplotlib.gridspec as gridspec
@@ -12,8 +7,6 @@ plt.rcParams['animation.ffmpeg_path'] = 'C:\\Program Files (x86)\\ffmpeg\\bin\\f
 writer = animation.FFMpegWriter(fps=4, bitrate=1000)
 
 def animate(world, individual_id, fname=None, *args, **kwargs):
-
-
     simnet = world.individuals[individual_id].internal
     fig = plt.gcf()
     gs1 = gridspec.GridSpec(4, 4)
@@ -24,7 +17,6 @@ def animate(world, individual_id, fname=None, *args, **kwargs):
     ax4 = plt.subplot(gs1[-1, 1:])
 
     def animate_frame(i):
-        # print i
         _tmp = [ax.cla() for ax in [ax1, ax2, ax3, ax4]]
         fig.suptitle('Network %d Neurons (%d%% excitatory) @t%s'
                      % (simnet.simdata[i].number_of_nodes(), 100.* simnet.simdata[i].excitatory_to_inhibitory_ratio , i), fontsize=20)

@@ -4,10 +4,6 @@ Created on Sun Jan 17 13:16:58 2016
 
 @author: brian
 """
-import matplotlib.pyplot as plt
-from matplotlib.colors import BoundaryNorm
-from matplotlib.ticker import MaxNLocator
-from pyBrainNetSim.drawing.viewers import vTrajectory
 from scipy.spatial.distance import euclidean
 from scipy.stats import randint
 from scipy.ndimage import zoom
@@ -18,16 +14,115 @@ import copy
 import random
 
 
-class Environment(object):
-    
-    def __init__(self, origin=(0., 0.), max_point=(20., 20.), deltas=1., field_permeability=0.5, *args, **kwargs):
+class ScalarField(object):
+    def __init__(self, field_type, c_grid, *args, **kwargs):
+        self.field_type = field_type
+        self.d_size = len(c_grid)
+        self.c_grid = c_grid
+        self.sources = {}
+        self._update_field()
 
+    def function(self, *args, **kwargs):
+        return np.zeros_like(self.c_grid[0])
+
+    def add_point_source(self, a_id, location, strength):
+        self.sources.update({a_id: {'location': location, 'strength': strength}})
+        self._update_field()
+
+    def rm_point_source(self, point_source_id):
+        del(self.sources[point_source_id])
+        self._update_field()
+
+    def _update_field(self):
+        _field = np.zeros_like(self.c_grid[0])
+        for source_id, source_properties in self.sources.iteritems():
+            _field += self.function(**source_properties)
+        self._field = _field
+        self._grad = np.gradient(self._field)
+
+    def field(self, source_id=None):
+        _field = self.function(**self.sources[source_id]) if source_id in self.sources else self._field
+        return _field
+
+    def field_at(self, location, source_id=None):
+        indx = self._loc_to_indx(location)  # TODO: PROBLEM IN 1-D
+        _field = 0.
+        if self.d_size == 1:
+            _field = self.field(source_id)[indx]
+        elif self.d_size == 2:
+            _field = self.field(source_id)[indx[1]][indx[0]]
+        elif self.d_size == 3:
+            _field = self.field(source_id)[indx[2]][indx[1]][indx[0]]
+        return _field
+
+    def gradient(self, source_id=None):
+        _grad = np.gradient(self.field(source_id)) if source_id in self.sources\
+            else self._grad
+        if self.d_size > 1:
+            _grad.reverse()  # REVERSE ORDERED - DOCUMENTED INCORRECTLY IN THE NUMPY DOCS
+        return _grad
+
+    def gradient_at(self, location, source_id=None):
+        indx = self._loc_to_indx(location)
+        _grad = grad = self.gradient(source_id)
+        if self.d_size == 1:
+            grad = np.array([_grad[indx]])
+        elif self.d_size == 2:
+            grad = np.array([_grad[i][indx[0]][indx[1]] for i in range(len(indx))])
+        elif self.d_size == 3:
+            grad = np.array([_grad[i][indx[0]][indx[1]][indx[2]] for i in range(len(indx))])
+        return grad
+
+    def _loc_to_indx(self, p):
+        """"Map the cartesian coordinates to closest index"""
+        cg = self.c_grid
+        idx = []
+        if len(cg) == 2:
+            idx.append(np.where(cg[0][0] == p[0])[0][0])
+            idx.append(np.where(cg[1].T[0] == p[1])[0][0])
+        elif len(cg) == 1.:
+            idx.append(np.where(cg[0] == p[0])[0][0])
+        else:
+            print '>2 dimensions not implemented' # TODO: Generalize this functionality for N-D
+        return np.array(idx, dtype=int)
+
+    def get_polar_grid(self, x0):
+        pg = []
+        if self.d_size == 2:
+            pg = utils.cart2pol(self.c_grid, x0=x0)
+        elif self.d_size == 1:
+            pg = self.c_grid - x0
+        return pg
+
+
+class LinearDecayScalarField(ScalarField):
+    def __init__(self, field_type, c_grid, field_permeability=1., *args, **kwargs):
+        super(LinearDecayScalarField, self).__init__(field_type, c_grid, *args, **kwargs)
+        self.field_permeability = field_permeability
+
+    def function(self, location=(0, 0), strength=1, *args, **kwargs):
+        return np.maximum(strength - abs((self.c_grid[0] - location))* self.field_permeability, 0.)
+
+
+class ExponentialDecayScalarField(ScalarField):
+    def __init__(self, field_type, c_grid, field_permeability=1., *args, **kwargs):
+        super(ExponentialDecayScalarField, self).__init__(field_type, c_grid, *args, **kwargs)
+        self.field_permeability = field_permeability
+
+    def function(self, location=(0, 0), strength=1, *args, **kwargs):
+        pg = self.get_polar_grid(location)
+        return strength * np.exp(-abs(pg[0] * self.field_permeability))
+
+
+class Environment(object):
+    def __init__(self, origin=(0., 0.), max_point=(20., 20.), deltas=1., field_decay=LinearDecayScalarField,
+                 field_permeability=0.5, *args, **kwargs):
         self.d_size, self.origin, self.max_point, self.deltas, self.c_grid = None, None, None, None, None
         self.change_world(origin, max_point, deltas)
         self._individuals = {}
         self.attractors = {}
-        self.field_permeability = 0.5
-        self.fields = {'Sensory': ExponentialDecayScalarField('Sensory', self.c_grid, self.field_permeability)}
+        self.field_permeability = field_permeability
+        self.fields = {'Sensory': field_decay('Sensory', self.c_grid, self.field_permeability)}
         self.an = 0  # counter for attractors
 
     def change_world(self, origin, max_point, deltas=1.):
@@ -48,12 +143,10 @@ class Environment(object):
         else:
             self.deltas = np.ones(self.d_size)
 
-        # self.slices = [slice(self.origin[i], self.max_point[i]+self.deltas[i], self.deltas[i])
-        #                for i in range(self.d_size)]
-        # self.c_grid = np.mgrid[self.slices]  # cartesian grid
         self.ticks = [np.arange(self.origin[i], self.max_point[i] + self.deltas[i], self.deltas[i])
                       for i in range(self.d_size)]
         self.c_grid = np.meshgrid(*self.ticks, sparse=False)
+
     def add_individual(self, individual):
         if isinstance(individual, Individual):
             self._individuals.update({individual.ind_id: individual})
@@ -70,11 +163,9 @@ class Environment(object):
         self.fields[field_type].add_point_source(attr.a_id, attr.position, attr.strength)
         self.an += 1
 
-    def add_random_attractor(self, field_type='Sensory'):
+    def add_random_attractor(self, field_type='Sensory', strength=1., energy=100):
         pos = np.array([randint(low=self.origin[i], high=self.max_point[i]).rvs() for i in range(self.d_size)])
-        attract = Attractor(self, pos, a_id='s%s' % self.an,
-                            strength=randint(low=8, high=20),
-                            energy_value=randint(low=50, high=100),
+        attract = Attractor(self, pos, a_id='s%s' % self.an, strength=strength, energy_value=energy,
                             attractor_type=field_type)
         self.add_attractor(attract, field_type)
 
@@ -103,61 +194,13 @@ class Environment(object):
         """
         return self.fields[field_type].gradient_at(location, source_id=attractor_id)
 
-    def plot_attractor_field(self, field_type='Sensory', attractor_id=None, upsample_factor=1, ax=None, **kwargs):
-        if ax is None:
-            fig, ax = plt.subplots()
-        dx, dy = 0.05, 0.05
-        cmap = plt.get_cmap('Blues')
-        if upsample_factor > 1:
-            x, y, z = self.__upsample_attractor_field(factor=int(upsample_factor), order=1,
-                                                      **{'field_type': field_type, 'attractor_id': attractor_id})
-        else:
-            x, y = self.c_grid
-            z = self.attractor_field(field_type, attractor_id)
-        z = z[:-1, :-1]
-        levels = MaxNLocator(nbins=15).tick_values(z.min(), z.max())
-        ax.contourf(x[:-1, :-1] + dx/2.,
-                    y[:-1, :-1] + dy/2., z, levels=levels,
-                    cmap=cmap)
-        for attr in self.attractors.itervalues():
-            ax.scatter(*attr.position, s=10, c='k', edgecolors='w', alpha=0.9)
-        self._format_plot(ax)
-        return ax
-
-    def plot_individual_trajectory(self, individual=None, at_time=None, show_attractor_field=True, field_type='Sensory',
-                                   attractor_id=None, upsample_factor=1, ax=None, **kwargs):
-        if ax is None:
-            fig, ax = plt.subplots()
-        ax.cla()
-        individual = [individual] if isinstance(individual, str) else individual
-        if show_attractor_field:
-            ax = self.plot_attractor_field(field_type, attractor_id, upsample_factor, ax, **kwargs)
-        individuals = self.individuals if individual is None else {s_id: self.individuals[s_id] for s_id in individual}
-        for ind_id, ind in individuals.iteritems():
-            t = at_time if isinstance(at_time, int) else len(ind.trajectory)
-            trajectory = ind.trajectory[:t]
-            if len(trajectory) == 1:
-                ax.scatter(*trajectory[-1], s=15, marker='s', c='r', edgecolors='w', alpha=0.9)
-            elif t > 0:
-                points = np.array(utils.points_to_segments(trajectory))
-                lines = vTrajectory(points)
-                lines.text.set_fontsize(9)
-                ax.scatter(*trajectory[-1], s=15, marker='s', c='r', edgecolors='w', alpha=0.9)
-                ax.add_collection(lines)
-        self._format_plot(ax)
-        return ax
-
-    def _format_plot(self, ax):
-        ax.set_aspect('equal', adjustable='box')
-        ax.set(xlim=[self.origin[0], self.max_point[0]], ylim=[self.origin[1], self.max_point[1]], title="Environment")
-
     def __upsample_attractor_field(self, factor=5, order=1, **kwargs):
         x = zoom(self.c_grid[0], factor, order=order)
         y = zoom(self.c_grid[1], factor, order=order)
         z = zoom(self.attractor_field(**kwargs), factor, order=order)
         return x, y, z
 
-    def generate_position(self, position):
+    def generate_position(self, position=None):
         if position is None:  # generate random position
             pos = np.array([randint(low=self.origin[i], high=self.max_point[i]).rvs() for i in range(self.d_size)])
         else:
@@ -174,23 +217,6 @@ class Environment(object):
         
     def _build_env(self):
         pass
-
-
-class Attractor(object):
-    def __init__(self, environment, position, strength, a_id=None, energy_value=100,
-                 attractor_type='Sensory'):
-        self.a_id = a_id
-        self.position = np.array(position)
-        self.strength = strength
-        self.energy_value = energy_value  # used to give the SensorMover if they converge to it.
-        environment.add_attractor(self, attractor_type)
-        self.environment = environment
-
-        self.field_type = 'Sensory'
-
-    @property
-    def field_permeability(self):
-        return self.environment.field_permeability
 
 
 class Individual(object):
@@ -275,7 +301,7 @@ class Individual(object):
         
     @property
     def velocity(self):
-        return np.vstack(([0., 0.], self.trajectory[1:]-self.trajectory[:-1]))
+        return np.vstack((np.zeros(self.d_size), self.trajectory[1:]-self.trajectory[:-1]))
 
     def dist_to(self, target):
         return euclidean(self.position, target)
@@ -297,7 +323,12 @@ class Individual(object):
             child = self._reproduce_asexually(error_rate)
         elif mode == 'sexual':
             child = self._reproduce_sexually(partner)
-        env = self.environment if not new_environment else None
+        if new_environment:
+            env = copy.copy(self.environment)
+            env.rm_individuals()
+        else:
+            env = self.environment
+        # env = self.environment if not new_environment else copy.deepcopy(self.environment)
         child.set_environment(env, *args, **kwargs)
         _tmp = [child.environment.add_attractor(attractor, attractor.field_type)
                 for attractor in self.environment.attractors.values()]
@@ -315,9 +346,10 @@ class Individual(object):
     def _reproduce_asexually(self, error_rate=0.):
         child = copy.copy(self)
         child.parents = [self]
+        child._cloned_from, child._not_cloned_from = self, None
         return child
 
-    def _reproduce_sexually(self, partner):
+    def _reproduce_sexually(self, partner):  # TODO: Broken.
         """Sexual reproduction between two networks"""
         inherited_state = -1  # -1 would be most recent
         network_props = ['num_nodes']
@@ -343,7 +375,7 @@ class Individual(object):
             p1 = nx.get_node_attributes(self.internal.simdata[inherited_state], n)
             p2 = nx.get_node_attributes(partner.internal.simdata[inherited_state], n)
             # add/remove nodal information based on the inherited number of nodes
-            chosen = self if choices[0][j] else partner
+            # chosen = self if choices[0][j] else partner
             # print "Using %s(N%d) for %s" %(chosen.ind_id, chosen.internal.simdata[inherited_state].number_of_nodes(), n)
             utils.set_node_attributes(child.internal.simdata[inherited_state], n, p1 if choices[0][j] else p2)
 
@@ -354,84 +386,18 @@ class Individual(object):
         return child
 
 
-class ScalarField(object):
-    def __init__(self, field_type, c_grid, *args, **kwargs):
-        self.field_type = field_type
-        self.d_size = len(c_grid)
-        self.c_grid = c_grid
-        self.sources = {}
-        self._update_field()
+class Attractor(object):
+    def __init__(self, environment, position, strength, a_id=None, energy_value=100,
+                 attractor_type='Sensory'):
+        self.a_id = a_id
+        self.position = np.array(position)
+        self.strength = strength
+        self.energy_value = energy_value  # used to give the SensorMover if they converge to it.
+        environment.add_attractor(self, attractor_type)
+        self.environment = environment
 
-    def function(self, *args, **kwargs):
-        return np.zeros_like(self.c_grid[0])
+        self.field_type = 'Sensory'
 
-    def add_point_source(self, a_id, location, strength):
-        self.sources.update({a_id: {'location': location, 'strength': strength}})
-        self._update_field()
-
-    def rm_point_source(self, point_source_id):
-        del(self.sources[point_source_id])
-        self._update_field()
-
-    def _update_field(self):
-        _field = np.zeros_like(self.c_grid[0])
-        for source_id, source_properties in self.sources.iteritems():
-            _field += self.function(**source_properties)
-        self._field = _field
-        self._grad = np.gradient(self._field)
-
-    def field(self, source_id=None):
-        _field = self.function(**self.sources[source_id]) if source_id in self.sources else self._field
-        return _field
-
-    def field_at(self, location, source_id=None):
-        indx = self._loc_to_indx(location)
-        _field = 0.
-        if self.d_size == 1:
-            _field = self.field(source_id)[indx]
-        elif self.d_size == 2:
-            _field = self.field(source_id)[indx[1]][indx[0]]
-        elif self.d_size == 3:
-            _field = self.field(source_id)[indx[2]][indx[1]][indx[0]]
-        return _field
-
-    def gradient(self, source_id=None):
-        _grad = np.gradient(self.field(source_id)) if source_id in self.sources\
-            else self._grad
-        _grad.reverse()  # REVERSE ORDERED - DOCUMENTED INCORRECTLY IN THE NUMPY DOCS
-        return _grad
-
-    def gradient_at(self, location, source_id=None):
-        indx = self._loc_to_indx(location)
-        _grad = grad = self.gradient(source_id)
-        if self.d_size == 1:
-            grad = np.array([_grad[indx]])
-        elif self.d_size == 2:
-            grad = np.array([_grad[i][indx[0]][indx[1]] for i in range(len(indx))])
-        elif self.d_size == 3:
-            grad = np.array([_grad[i][indx[0]][indx[1]][indx[2]] for i in range(len(indx))])
-        return grad
-
-    def _loc_to_indx(self, p):
-        """"Map the cartesian coordinates to closest index"""
-        cg = self.c_grid
-        idx = []
-        if len(cg) == 2:
-            # print "p:%s at:x: %s, y: %s" %(p, np.where(cg[0][0] == p[0]), np.where(cg[1].T[0] == p[1]))
-            # print "y: %s" %np.where(cg[1].T[0] == p[1])
-            idx.append(np.where(cg[0][0] == p[0])[0][0])
-            idx.append(np.where(cg[1].T[0] == p[1])[0][0])
-        else:
-            print '>2 dimensions not implemented'
-        # print np.array(idx, dtype=int)
-        return np.array(idx, dtype=int)
-
-
-class ExponentialDecayScalarField(ScalarField):
-    def __init__(self, field_type, c_grid, field_permeability=1., *args, **kwargs):
-        super(ExponentialDecayScalarField, self).__init__(field_type, c_grid, *args, **kwargs)
-        self.field_permeability = field_permeability
-
-    def function(self, location=(0, 0), strength=1, *args, **kwargs):
-        p_grid = utils.cart2pol(self.c_grid, x0=location)
-        return strength * np.exp(-p_grid[0] * self.field_permeability)
+    @property
+    def field_permeability(self):
+        return self.environment.field_permeability

@@ -19,6 +19,7 @@ NODE_PROPS = {
         'energy_basal_rate': 0.1,
         'energy_dynamics': sfunct.linear,
         'spontaneity': 0.,
+        'state': 'active',
         'inactive_period': 0,
         'value': 0.,
         'postsyn_signal': 0.,
@@ -40,6 +41,7 @@ NODE_PROPS = {
         'energy_basal_rate': 0.1,
         'energy_dynamics': sfunct.linear,
         'spontaneity': 0.,
+        'state': 'active',
         'inactive_period': 0,
         'value': 0.,
         'postsyn_signal': 0.,
@@ -61,6 +63,7 @@ NODE_PROPS = {
         'threshold': 1.,
         'threshold_change_fxn': 'Future',
         'spontaneity': .1,
+        'state': 'active',
         'inactive_period': 0,
         'value': 0.,
         'postsyn_signal': 0.,
@@ -82,6 +85,7 @@ NODE_PROPS = {
         'threshold': 1.,
         'threshold_change_fxn': 'Future',
         'spontaneity': .1,
+        'state': 'active',
         'stimuli_sensitivity': 1.,  # kappa
         'stimuli_max': 1.,  # maximum probability of firing
         'stimuli_min': 0.,  # minimum probability of firing

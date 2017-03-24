@@ -24,14 +24,14 @@ class SensorMoverPopulationBase(object):
         self._population_size = {'existing':[], 'born': [], 'found_target': [], 'died': []}
         self.individuals = {}
         self.t, self.n, self.data_cutoff = 0, 0, data_cutoff
-        self._create_initial_population()
+        self._create_initial_population(*args, **kwargs)
 
-    def _create_initial_population(self):
+    def _create_initial_population(self, *args, **kwargs):
         for i in range(self.initial_population_size):
-            self.create_and_add_individual()
+            self.create_and_add_individual(*args, **kwargs)
 
-    def create_and_add_individual(self, position=None):
-        network = self.network_type(self.smd_dist.create_digraph(), data_cutoff=self.data_cutoff)
+    def create_and_add_individual(self, position=None, *args, **kwargs):
+        network = self.network_type(self.smd_dist.create_digraph(), data_cutoff=self.data_cutoff, *args, **kwargs)
         env = self.environment if self.share_world else copy.copy(self.environment)
         env.rm_individuals()
         _id = 'G0_I%s' % self.n
@@ -62,7 +62,6 @@ class SensorMoverPopulationBase(object):
 
     def reproduce(self, mode='asexual', partner=None, new_environment=True, error_rate=0., *args, **kwargs):
         children = None
-        # print ["%s - N%d" %(iid, i.internal.simdata[-1].number_of_nodes()) for iid, i in self.individuals.iteritems()]
         if mode == 'asexual':
             children = self.reproduce_asexually(new_environment=new_environment, error_rate=error_rate)
         elif mode == 'sexual':
@@ -73,7 +72,7 @@ class SensorMoverPopulationBase(object):
         rep, children = self.get_reproducing_individuals(), []
         for i in rep:
             children.append(i.reproduce(mode='asexual', new_environment=new_environment, error_rate=error_rate))
-        return children
+        return children, self
 
     def reproduce_sexually(self, error_rate=0., new_environment=True):
         """Combine individuals within the population.
@@ -81,7 +80,6 @@ class SensorMoverPopulationBase(object):
         2. Match the reproducing individual with another reproducing individual
             - Matching process done at random"""
         rep, children, parents = self.get_reproducing_individuals(), [], []
-        # print "Rep @t%s - %s" %(self.t, [i.ind_id for i in rep])
         for i in range(len(rep)//2):
             p1, p2 = rep[2*i], rep[2*i+1]
             children.append(p1.reproduce(mode='sexual', partner=p2, new_environment=new_environment, error_rate=error_rate))
@@ -97,7 +95,6 @@ class SensorMoverPopulationBase(object):
             if i.is_dead:
                 _dead_individuals.append(i)
             found_target += 1 if i.found_target() else 0
-
         # population-level method because it requires two individuals
         children, parents = self.reproduce(mode=self.reproduction_mode, new_environment=True)
         self.__update_population_size({'existing': len(self.individuals),
@@ -106,7 +103,6 @@ class SensorMoverPopulationBase(object):
                                        'died': len(_dead_individuals)})
         self.add_individuals(children)
         self.rm_individuals(_dead_individuals)
-        # _ = [p.update(p.internal.simdata) for p in parents] # mainly to update the energy lost
         self.t += 1
 
     def sim_time_steps(self, max_iter=10):
@@ -135,8 +131,8 @@ class SensorMoverPopulationBase(object):
         p = self.population_size
         df = pd.concat([p['existing'], self.energy_initial, self.energy_final, self.energy_consumed, -self.energy_lost,
                         self.energy_added, self.global_energy], axis=1)
-        df.rename(columns={'existing':"# Agents", 0: "Initial E", 1: "Final E", 2: "Consumed E", 3: "Lost E", 4: "Added E", 5: "Global E"},
-                  inplace=True)
+        df.rename(columns={'existing':"# Agents", 0: "Initial E", 1: "Final E", 2: "Consumed E", 3: "Lost E",
+                           4: "Added E", 5: "Global E"}, inplace=True)
         return df
 
     @property
@@ -167,6 +163,15 @@ class SensorMoverPopulationBase(object):
         for iid, i in self.individuals.iteritems():
             e = e.add(i.energy_initial.sum(axis=1), fill_value=0.)
         return e
+
+    @property
+    def individual_energy_initial(self):
+        e = []
+        for iid, i in self.individuals.iteritems():
+            te = i.energy_initial.sum(axis=1)
+            te.name = iid
+            e.append(te)
+        return pd.concat(e, axis=1)
 
     @property
     def energy_final(self):
@@ -241,43 +246,6 @@ class SensorMoverPopulationBase(object):
         sm_ids = df.cumsum().iloc[row].sort_values(ascending=False).index.values.tolist()
         return sm_ids, df
 
-    def plot_efficiency(self, to='Sensory', ax=None, **kwargs):
-        df = self.individual_efficiency(to=to)
-        ax = df.cumsum().plot(style='o-', ax=ax)
-        return ax
-
-    def draw_top_networkx(self, top=5, at_time=None, fig=None):
-        """Draw the top individual's internal network by efficiency."""
-        max_cols, max_axs = 5, 20
-        axs = self._get_axes(top, max_cols)
-        sm_ids, _ = self.top_efficiencies(top, at_time)
-        row = -1 if at_time is None else at_time
-        for i, sm_id in enumerate(sm_ids[:top]):
-            axs[i] = draw_networkx(self.individuals[sm_id].internal.simdata[row], ax=axs[i])
-            axs[i].axis('square')
-            axs[i].set(xticklabels=[], yticklabels=[], title="%s\nEfficiency: %.2f" % (sm_id, self.individuals[sm_id].efficiency().cumsum().iloc[-1]))
-        return axs
-
-    def draw_top_trajectories(self, top=5, at_time=None, fig=None):
-        axs = self._get_axes(top, 5)
-        row = -1 if at_time is None else at_time
-        sm_ids, _ = self.top_efficiencies(top, at_time)
-        for i, sm_id in enumerate(sm_ids[:top]):
-            axs[i] = self.individuals[sm_id].environment.plot_individual_trajectory(upsample_factor=20, ax=axs[i])
-            # axs[i].axis('equal')
-            axs[i].set(title="%s Trajectory\nEfficiency: %.2f"
-                             % (sm_id, self.individuals[sm_id].efficiency().cumsum().iloc[-1]))
-        return axs
-
-    def _get_axes(self, num, max_cols):
-        rows = int(np.floor(num / max_cols)) + 1
-        cols = int(num) if num <= max_cols else max_cols
-        axs = [plt.subplot2grid((rows, cols), (i / cols, i % cols)) for i in range(num)]
-        return axs
-
 
 class SensorMoverPopulation(SensorMoverPopulationBase):
-    """
-
-    """
     pass

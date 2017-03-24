@@ -15,12 +15,13 @@ import copy
 
 class SensorMover(Individual):
     def __init__(self, environment, position=None, initial_network=None, ind_id=None, reproduction_mode='asexual',
-                 reproduction_cost=0.5, reproductive_threshold=10, data_cutoff=None, global_time_born=0, *args, **kwargs):
+                 reproduction_cost=0.5, reproductive_threshold=10, data_cutoff=None, global_time_born=0,
+                 *args, **kwargs):
         """Class used to simulate the how a 'SensorMover' individual operates in the environment it is placed in."""
         self.internal = []
         self.motor_activations = []
         self._sensory_gradients = []  # along trajectory
-        self._internal_sensory_signals = []  # what the sensors sense.
+        self._internal_sensory_signals = []  # what the sensory sense.
         self.consumed = []
         self.set_internal_network(initial_network)
         super(SensorMover, self).__init__(environment, position=position, ind_id=ind_id,
@@ -29,9 +30,9 @@ class SensorMover(Individual):
                                           reproduction_mode=reproduction_mode,
                                           data_cutoff=data_cutoff,
                                           global_time_born=global_time_born,
-                                          *args,**kwargs)
+                                          *args, **kwargs)
         self._energy_final, self._energy_initial, self._energy_consumed,self._energy_lost = {}, {}, {}, {}
-        self._energy_added, self._num_nodes_firing = {}, {}
+        self._energy_added, self._num_nodes_firing, self.attractor_pos = {}, {}, []
         self.t = -1
         number_of_children, number_of_parents = 1., 2.
         self.energy_reduction_factor = number_of_parents / (number_of_children + number_of_parents)
@@ -43,12 +44,15 @@ class SensorMover(Individual):
         if self.is_dead:
             return
         target = self.found_target()
-        if target:  # 1. Award energy & 2. Move/Create new attractor
+        if target:  # Award energy & Move/Create new attractor
+            # print '%s FOUND %s TARGET @ %s @ t:%s' %(self.ind_id, target.a_id, target.position, self.t)
+            strength, energy = target.strength, target.energy_value
             self.internal.add_value('energy_value',
                                     value=target.energy_value/float(self.internal.simdata[-1].number_of_nodes()),
                                     time_id=-1)
             self.environment.rm_attractor(target.a_id)
             self._energy_added[self.t] = target.energy_value
+            self.environment.add_random_attractor(field_type='Sensory', strength=strength, energy=energy)
         self._sensory_gradients.append(self.environment.attractor_gradient_at(self.position, field_type='Sensory'))
         self._evaluate_sensory_signals(self.internal.simdata[-1])  # get field & fire sensory neurons at position
         self.internal.evolve_time_step(driven_nodes=driven_nodes)  # evolve 1 internal state's time-period
@@ -69,6 +73,7 @@ class SensorMover(Individual):
         self.reproductive_energy_cost = 0.
         self.t += 1
         self._energy_added.update({self.t: 0.})
+        self.attractor_pos.append([a.position for a in self.environment.attractors.itervalues()])
 
     def reset_data(self):
         super(SensorMover, self).reset_data()
@@ -80,26 +85,29 @@ class SensorMover(Individual):
         self._energy_added = {}
         self._num_nodes_firing = {}
         self._prior_energy = self.internal.simdata[-1].energy_vector
+        self.attractor_pos = []
         
     def _evaluate_sensory_signals(self, ng):
         """
         Evaluate the sensory signals and transmit the signal.
         :param ng: neural network graph (NeuralNetData)
         """
-        sn_ids = [nID for nID, nAttrDict in ng.node.items()
-                  if (nAttrDict['node_class'] == 'Sensory')]
-        for nID in sn_ids:   # 'Attractor' field value at each sensory position
-            pos = self.__filter_pos(self.position + ng.node[nID]['sensor_direction'])
-            # print "pos %s | filtered pos %s" %(self.position + ng.node[nID]['sensor_direction'], pos)
-            ng.node[nID]['signal'] = \
-                self.environment.attractor_field_at(pos, field_type='Sensory')
-            ng.node[nID]['spontaneity'] = ng.node[nID]['stimuli_fxn'](
-                 ng.node[nID]['signal'], ng.node[nID]['stimuli_min'], ng.node[nID]['stimuli_max'],
-                 ng.node[nID]['stimuli_sensitivity'], ng.node[nID]['sensory_mid'])
+        snids = [nid for nid, nAttrDict in ng.node.items() if (nAttrDict['node_class'] == 'Sensory')]
+        for nid in snids:  # 'Attractor' field value at each sensory position
+            pos = self.__filter_pos(self.position + np.array(ng.node[nid]['sensor_direction']))
+            ng.node[nid]['signal'] = self.environment.attractor_field_at(pos, field_type='Sensory')[0]
+            nattr = ng.node[nid]
+            out = nattr['stimuli_fxn'](nattr['signal'], nattr['stimuli_min'], nattr['stimuli_max'],
+                                       nattr['stimuli_sensitivity'], nattr['sensory_mid'])
+            nattr['spontaneity'] = 1.  # ensure the sensory neuron "fires"
+            nattr['sensory_response'] = out
+            nattr['sensory_position'] = pos
+            for u, v, d in ng.out_edges(nbunch=[nid], data=True):  # dynamically change the weight of connected neurons
+                ng.edge[u][v]['weight'] = out
 
     def _motor_actions(self, ng):
         mn_ids = [n_id for n_id in ng.postsyn_nodes if n_id in ng.nodes(node_class='Motor')]
-        move = np.array([0., 0.])
+        move = np.zeros(self.d_size)
         if mn_ids is None:
             return move
         for nID in mn_ids:
@@ -146,7 +154,7 @@ class SensorMover(Individual):
 
     def set_internal_network(self, network, t0=0):
         self.internal = network
-        if len(self.internal.simdata)>0:
+        if len(self.internal.simdata) > 0:
             self.internal.initial_net = network.simdata[-1]
         self.internal.initiate_simulation(network, t0=t0)
 
@@ -160,6 +168,16 @@ class SensorMover(Individual):
     @property
     def is_dead(self):
         return self.internal.simdata[-1].is_dead
+
+    @property
+    def dead_at(self):
+        at_t = None
+        for t, nn in enumerate(self.internal.simdata):
+            if nn.is_dead:
+                at_t = t
+                break
+        return at_t
+
 
     @property
     def is_living(self):
@@ -176,13 +194,13 @@ class SensorMover(Individual):
     def efficiency(self, to='Sensory', *args, **kwargs):
         """Method used to measure of how much motor energy has been expended in an effort to get to the target.
         efficiency = convolution(sensory gradient, velocity) / motor energy expenditure."""
+        # TODO: 1. Broken; Update method. 2. Rename to be "fitness" to be in-line with genetic algorithm terminology.
         sn = self.internal.simdata
-        # motor_energy = sn.neuron_group_property_ts('energy_vector')[sn[-1].nodes(node_class='Motor')]
-        motor_energy = self.energy[sn[-1].nodes(node_class='Motor')]
+        motor_energy_consumed = self.energy_consumed[sn[-1].nodes(node_class='Motor')]
         numerator = np.multiply(self.velocity, self.sensory_gradients)[1:].sum(axis=1)
-        denominator = motor_energy.sum(axis=1) if self.is_living else motor_energy.sum(axis=1)
+        denominator = motor_energy_consumed.sum(axis=1) if self.is_living else motor_energy_consumed.sum(axis=1)
         denominator[denominator == 0] = 1.
-        eff = numerator / denominator
+        eff = numerator.T[0] / denominator
         return eff
 
     def reproduce(self, mode='asexual', new_environment=True, energy_cost=0.50, partner=None, *args, **kwargs):
@@ -246,30 +264,8 @@ class SensorMover(Individual):
 
     @property
     def energy_balance(self):
-        df = pd.concat([self.energy_initial.sum(axis=1), self.energy_final.sum(axis=1), self.energy_consumed.sum(axis=1)
-                           , -self.energy_lost.sum(axis=1), self.energy_added,
-                        # self.energy_final.sum(axis=1) + self.energy_consumed.cumsum() - self.energy_lost.cumsum()
-                        # + self.energy_added
-                        ], axis=1)
-        df.rename(
-            columns={0: "Initial E", 1: "Final E", 2: "Consumed E", 3: "Lost E", 4: "Added E", 5: "Global E"},
-            inplace=True)
+        df = pd.concat([self.energy_initial.sum(axis=1), self.energy_final.sum(axis=1),
+                        self.energy_consumed.sum(axis=1), -self.energy_lost.sum(axis=1), self.energy_added], axis=1)
+        df.rename(columns={0: "Initial E", 1: "Final E", 2: "Consumed E", 3: "Lost E", 4: "Added E", 5: "Global E"},
+                  inplace=True)
         return df
-
-    def plot_efficiency(self, **kwargs):
-        eff = pd.Series(self.efficiency())
-        eff.plot(style='o-')
-
-class SensorMoverFactory(object):
-    """
-    Used to create multiple individuals within 1 world.
-    """
-
-    def __init__(self, *args, **kwargs):
-        pass
-
-    def create_new(self, *args, **kwargs):
-        pass
-
-    def create_offspring(self, *args, **kwargs):
-        pass

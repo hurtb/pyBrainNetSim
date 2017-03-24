@@ -8,13 +8,7 @@ Created on Mon Dec 28 09:07:44 2015
 @author: brian
 """
 
-import numpy as np
-from scipy.spatial import ConvexHull
-import matplotlib.pyplot as plt
-import matplotlib.patches as patches
 from pyBrainNetSim.models.network import *
-from pyBrainNetSim.drawing.viewers import draw_networkx
-from scipy.stats import uniform
 import copy
 
 
@@ -66,6 +60,7 @@ class SimNetBase(object):
         if self.simdata[-1].is_dead:
             return
         nd = self.simdata[-1]
+        nd.presyn_nodes = self.simdata[-2].postsyn_nodes
         nd.initialize()
         self.add_driven(nd, driven_nodes=driven_nodes) # Externally (forced) action potentials
         self.add_spontaneous(nd)  # add spontaneous firing
@@ -143,32 +138,11 @@ class SimNetBase(object):
         for nid in self.simdata[-1].dead_nodes:
             for onid in self.simdata[-1].out_edges(nid):
                 self.simdata[-1].edge[nid][onid[1]]['weight'] = 0.
-        self.simdata[-1].presyn_nodes = self.simdata[-2].postsyn_nodes
         if isinstance(self.data_cutoff, (int, float)):
             if len(self.simdata) > self.data_cutoff:
-                del self.simdata[:(len(self.simdata) - self.data_cutoff)]  # pop the first item in list
+                del self.simdata[1:(len(self.simdata) - self.data_cutoff)]  # pop the first item in list
         self.t += self.dt  # step forward in time
         self.n += 1
-
-    def draw_networkx(self, t=None, axs=None):
-        """Draw networkx graphs for time points indicated"""
-        max_cols, max_axs, color, alpha = 5, 20, '#D9F2FA', 0.5
-        if t is None or not isinstance(t, (int, float, list, tuple, np.ndarray)):
-            t = range(self.n + 1) if t is None or isinstance(t, [int, float]) else t  # get all points
-        else:
-            t = [t] if isinstance(t, (int, float)) else t  # get all points
-        num_ax = len(t)
-        if axs is None or num_ax != len(axs):
-            rows = int(np.floor(num_ax / max_cols)) + 1
-            cols = num_ax if num_ax <= max_cols else max_cols
-            axs = [plt.subplot2grid((rows, cols), (i/cols, i % cols)) for i in range(num_ax)]
-        max_e = np.array(nx.get_node_attributes(self.simdata[0],'energy_value').values()).max()
-        for i, ax in enumerate(axs):
-            axs[i] = draw_networkx(self.simdata[i], ax=ax, max_e=max_e)
-            axs[i].axis('square')
-            axs[i].set(xticklabels=[], yticklabels=[])
-        plt.tight_layout(pad=0.05)
-        return axs
 
 
 class SimNet(SimNetBase):
@@ -183,14 +157,14 @@ class SimNet(SimNetBase):
     def find_inactive(self, ng):
         """Retrieves a list of neurons firing within the last 'inactive_period' for each neuron."""
         inact = []
-        for nID, in_per in nx.get_node_attributes(ng, 'inactive_period').items():
+        for nid, in_per in nx.get_node_attributes(ng, 'inactive_period').items():
             if in_per == 0.:
                 continue
             if in_per > len(ng):
                 in_per = len(ng)
-            numfire = self.simdata.neuron_group_property_ts('presyn_vector')[nID][-int(in_per):].sum()
+            numfire = self.simdata.neuron_group_property_ts('presyn_vector')[nid][-int(in_per):].sum()
             if numfire > 0.:
-                inact.append(nID)
+                inact.append(nid)
         ng.inactive_nodes = inact
      
     def integrate_action_potentials(self, ng):
@@ -199,26 +173,23 @@ class SimNet(SimNetBase):
 
     def propagate_action_potentials(self, ng):
         """Propagate AP from pre to post given the network's thresholds."""
-        thresh = nx.get_node_attributes(ng, 'threshold').values()
-        ng.prop_vector = (ng.postsyn_signal + ng.spont_signal + ng.driven_vector > thresh).astype(float)
+        # thresh = nx.get_node_attributes(ng, 'threshold').values()
+        thresh = ng.attr_vector('threshold')
+        ng.afferent_signal = ng.postsyn_signal + ng.spont_signal + ng.driven_vector
+        ng.prop_vector = (ng.afferent_signal > thresh).astype(float)
         AP_vector = np.multiply(ng.prop_vector, ng.active_vector)
         AP_vector = np.multiply(AP_vector, ng.alive_vector)
         ng.postsyn_nodes = ng.vector_to_nodeIDs(AP_vector)
 
     def generate_spontaneous(self, ng):
-        """
-        Generate spontaneous firing. Outputs a voltage based on the spontaneity (0-1, like a percentage) and the
-        threshold number. Spontaneity=1
-        """
+        """Generate spontaneous firing. Outputs a voltage based on the spontaneity (0-1, like a percentage) and the
+        threshold number. Spontaneity=1."""
         out = []
-        for n_id in ng.nodes():
-            # print n_id, ng.node[n_id]['spontaneity'], ng.node[n_id]['threshold']
-            smin = ng.node[n_id]['spontaneity'] * ng.node[n_id]['threshold']
-            smax = smin + 1.
-            out.append(uniform(loc=smin, scale=smax).rvs())
+        for nid in ng.nodes():
+            out.append(0. if ng.node[nid]['spontaneity'] != 1. else 1.)
         out = np.array(out)
-        out[[ng.nID_to_nIx[n_id] for n_id in ng.inactive_nodes]] = 0.
-        out[[ng.nID_to_nIx[n_id] for n_id in ng.dead_nodes]] = 0.
+        out[[ng.nID_to_nIx[nid] for nid in ng.inactive_nodes]] = 0.
+        out[[ng.nID_to_nIx[nid] for nid in ng.dead_nodes]] = 0.
         out = np.multiply(out, ng.active_vector)
         return out  # vector of numbers ordered by .nodes()
 

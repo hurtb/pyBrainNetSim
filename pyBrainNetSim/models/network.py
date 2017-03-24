@@ -22,9 +22,10 @@ class NeuralNetData(nx.DiGraph):
         self.inactive_nodes = self.set_default(inactive_node)
         self.presyn_nodes = []
         self.postsyn_nodes = []
-        self.postsyn_signal = []
         # self.spont_nodes = []
         self.spont_signal = np.zeros(self.number_of_nodes())
+        self.afferent_signal = np.zeros_like(self.spont_signal)
+        self.prop_signal = np.zeros_like(self.spont_signal)
         self.driven_nodes = []
         self.prop_vector = []
         self.dead_nodes = []
@@ -63,10 +64,12 @@ class NeuralNetData(nx.DiGraph):
         for nID in nIDs:
             self.node[nID].update(**kwargs)
 
-    def nodes(self, node_class=None):
+    def nodes(self, node_class=None, node_type=None):
         nodes = super(NeuralNetData, self).nodes()
         if isinstance(node_class, str):
             nodes = [n_id for n_id in nodes if self.node[n_id]['node_class'] == node_class]
+        if isinstance(node_type, str):
+            nodes = [n_id for n_id in nodes if self.node[n_id]['node_type'] == node_type]
         return nodes
 
     @property
@@ -90,6 +93,9 @@ class NeuralNetData(nx.DiGraph):
     @property
     def nIx_to_nID(self):
         return {i: nID for i,nID in enumerate(self.nodes())}
+
+    def attr_vector(self, attr):
+        return np.array([self.node[n_id][attr] for n_id in self.nodes()])
 
     @property
     def active_nodes(self):
@@ -245,28 +251,13 @@ class NeuralNetData(nx.DiGraph):
      
 class NeuralNetSimData(list):
     """
-    Collection of the simulation parameters and simulation data
-    
-    examples data from time 4ms
-    {t: 4 ms,
-        NeuralNetData: overidden networkx graph
-        ...
-     ...
-     }  
+    Collection of the simulation parameters and simulation data.
     """
     def __init__(self, t0=0, *args, **kwargs):
         super(NeuralNetSimData, self).__init__(*args, **kwargs)
         self._fire_data = {}  # nodeID: time_series list
         self._active = {}
         self.t0 = t0
-    
-    @property
-    def fire_data(self):
-        return pd.DataFrame(self._fire_data)
-        
-    @property
-    def active(self):
-        return pd.DataFrame(self._active)
 
     def neuron_group_property_ts(self, node_attribute):
         """
@@ -338,6 +329,14 @@ class NeuralNetSimData(list):
                     ts.update({pair: {}})
                 ts[pair].append({t: ed[pair]})
         return ts
+
+    @property
+    def fire_data(self):
+        return pd.DataFrame(self._fire_data)
+
+    @property
+    def active(self):
+        return pd.DataFrame(self._active)
 
     @property
     def total_energy(self):

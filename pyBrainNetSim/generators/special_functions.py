@@ -22,8 +22,8 @@ class EnergyDynamics(object):
 
 
 def linear(e, fire_loss):
-    de = fire_loss if e - fire_loss >= 0. else 0.
-    return e-de, de
+    de = fire_loss if e > fire_loss else e
+    return de
 
 
 def sigmoid(x, fmin, fmax, sensitivity, x_mid):

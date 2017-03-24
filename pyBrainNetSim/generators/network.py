@@ -1,10 +1,8 @@
 import copy
-import types
 from itertools import permutations
 import networkx as nx
 import numpy as np
 import scipy as sp
-import random
 from pyBrainNetSim.generators.settings.base import *
 from pyBrainNetSim.models.network import NeuralNetData
 import pyBrainNetSim.utils as utils
@@ -120,23 +118,21 @@ class NodeProperties(Properties):
         self._i = 0
         self._pos = []
         self.set_kwargs(**kwargs)
-        self.reset_props()
+        # self.reset_props()
 
     def sample(self, *args, **kwargs):
         self.reset_props()
         number_of_nodes = int(self._chk_rand(self.number_of_nodes))
-        # self.set_positions(number_of_nodes, self._chk_rand(self.physical_distribution['type']), *args, **kwargs)
         nodes = []
+        # print "num nodes %s" % number_of_nodes
         for i in range(number_of_nodes):
-            prop = self.get_one_sample()
-            # prop.update({'pos':self._pos[self._i]})
-            prop.update(self.extra_props())
             node_id = '%s%d' % (self._node_id_prefix, self._i)
+            prop = self.get_one_sample()
             nodes.append((node_id, prop))
             self._i += 1
         return nodes
 
-    def get_one_sample(self, node_type=None, addn_props=None, **kwargs):
+    def get_one_sample(self, node_type=None, attr=None, **kwargs):
         node_type = node_type if isinstance(node_type, str) else self.evaluate_node_type()
         if node_type not in self._node_type_acceptable:
             return
@@ -145,6 +141,7 @@ class NodeProperties(Properties):
         else:
             prop = {key: self.sample_field(val, key) for key, val in self.copy_intrinsic_props().iteritems()}
         prop.update({'node_type': node_type, 'node_class': self.node_class})
+        prop.update(self.extra_props())
         return prop
 
     def extra_props(self, *args, **kwargs):
@@ -164,6 +161,7 @@ class NodeProperties(Properties):
             self._pos = self.get_bydirection_positions(number_of_nodes, *args, **kwargs)
 
     def reset_props(self):
+        self._i = 0
         self._number_of_node_types = len(self._node_type_acceptable)
         self._initialized = False
         if self.identical_within_type:
@@ -172,7 +170,7 @@ class NodeProperties(Properties):
             _tmp_sample = self.get_one_sample(self._node_type_acceptable[0])
             self._sampled_props.update({n_type: _tmp_sample for n_type in self._node_type_acceptable})
         self._initialized = True
-        self._i = 0
+
 
     def get_grid_positions(self, num_neurons, *args, **kwargs):
         half_grid_size = np.round(self.physical_distribution['size'] / 2.)
@@ -202,7 +200,6 @@ class NodeProperties(Properties):
         mxdist = np.max(mx-mn)
         offset = self._chk_rand(self.physical_distribution['offset'])
         extra = self._chk_rand(self.physical_distribution['extra_distance'])
-        print self.direction
         for d in self.direction:  # loop through each direction
             extra_dim = np.zeros(len(d) + 1)
             extra_dim[-1] = 1.
@@ -238,6 +235,7 @@ class MotorNodeProperties(NodeProperties):
     _node_type_acceptable = ['E']
 
     def extra_props(self, *args, **kwargs):
+        # print "Motor: %s, %s" % (self._i, self.direction)
         return {'force_direction': np.array(self.direction[self._i])}
 
 
@@ -248,13 +246,14 @@ class SensoryNodeProperties(NodeProperties):
     _node_type_acceptable = ['E', 'I']
 
     def extra_props(self, *args, **kwargs):
+        # print "Sensory: %s, %s" %(self._i, self.direction)
         return {'sensor_direction': np.array(self.direction[self._i])}
 
 
 class EdgeProperty(Properties):
     def __init__(self, prop, named_node_from=None, named_node_to=None, class_node_from=None, class_node_to=None, *args, **kwargs):
         super(EdgeProperty, self).__init__(*args, **kwargs)
-        self._props = prop if isinstance(prop, dict) else {}
+        self.props = prop if isinstance(prop, dict) else {}
         self._property_names = ['named_node_from', 'named_node_to', 'class_node_from', 'class_node_to',
                                 'weight', 'minimum_cutoff', 'maximum_value', 'identical']
         self.named_node_from = named_node_from
@@ -266,7 +265,7 @@ class EdgeProperty(Properties):
         self.maximum_value = None
         self.identical = False
 
-        self.set_kwargs(**self._props)
+        self.set_kwargs(**self.props)
         self.reset_props()
 
     def sample(self):
@@ -299,9 +298,9 @@ class EdgeProperties(Properties):
     def __init__(self, prop=None, *args, **kwargs):
         super(EdgeProperties, self).__init__(*args, **kwargs)
         self._default_props = SYNAPSES
-        self._prop = SYNAPSES if not isinstance(prop, list) else prop
+        self.props = SYNAPSES if not isinstance(prop, list) else prop
         self.edges = {}
-        self.reset_props(prop=self._prop)
+        self.reset_props(prop=self.props)
 
     def sample(self, node_list):
         w = []  # list of tuples [(nID1, nID2, weight_value), (nID1, ...)
@@ -323,30 +322,41 @@ class EdgeProperties(Properties):
 
 
 class SensorMoverProperties():
-    def __init__(self, internal=None, sensors=None, motor=None, weights=None, *args, **kwargs):
-        self.internal = internal if internal is not None else InternalNodeProperties()
-        self.sensors = sensors if sensors is not None else SensoryNodeProperties()
-        self.motor = motor if motor is not None else MotorNodeProperties()
-        self.weights = weights if weights is not None else EdgeProperties()
+    def __init__(self, nodes=None, edges=None, internal_dist=None, sensory_dist=None, motor_dist=None, weight_dist=None,
+                 *args, **kwargs):
+        self._acceptable_node_types = ['Internal', 'Sensory', 'Motor']
+        self.internal = internal_dist if internal_dist is not None else InternalNodeProperties()
+        self.sensory = sensory_dist if sensory_dist is not None else SensoryNodeProperties()
+        self.motor = motor_dist if motor_dist is not None else MotorNodeProperties()
+        self.weights = weight_dist if weight_dist is not None else EdgeProperties()
+        self._nodes, self._edges, self.props = nodes, edges, {}
 
     def sample(self, pruning_method='proximity', *args, **kwargs):
-        """
-        Generate a dict library of the properties of a sensor-mover object. Use this to feed simulations.
+        """Generate a dict library of the properties of a sensor-mover object. Use this to feed simulations.
         :param args: to be used in the future
         :param kwargs: to be used in the future
         :return: dict
         """
-        internal_nodes = self.internal.sample()
-        sensory_nodes = self.sensors.sample(existing_points=internal_nodes)
-        motor_nodes = self.motor.sample(existing_points=internal_nodes)
-        nodes = internal_nodes + sensory_nodes + motor_nodes
-        weights = self.weights.sample(nodes)
-        weights = self.prune_edges(nodes, weights, pruning_method=pruning_method)  # apply the max_incoming/max_outgoing
+        if self._nodes is not None:
+            nodes = self._filter_nodes(self._nodes)
+        else:
+            # print "NEW SAMPLE\ninternal"
+            internal_nodes = self.internal.sample()
+            # print "sensory"
+            sensory_nodes = self.sensory.sample(existing_points=internal_nodes)
+            # print "motor"
+            motor_nodes = self.motor.sample(existing_points=internal_nodes)
+            nodes = internal_nodes + sensory_nodes + motor_nodes
+        if self._edges is not None:
+            weights = self._edges
+        else:
+            weights = self.weights.sample(nodes)
+            weights = self.prune_edges(nodes, weights, pruning_method=pruning_method)  # apply the max_incoming/max_outgoing
         return nodes, weights
 
     def reset_props(self):
         self.internal.reset_props()
-        self.sensors.reset_props()
+        self.sensory.reset_props()
         self.motor.reset_props()
         self.weights.reset_props()
 
@@ -357,6 +367,9 @@ class SensorMoverProperties():
         G.add_nodes_from(nodes)
         G.add_weighted_edges_from(edges)
         return G
+
+    def _filter_nodes(self, nodes):
+        return filter_nodes(nodes, sensor_mover_property=self)
 
     def __list_to_dict(self, v):
         return {nid: val for nid, val in v}
@@ -407,3 +420,23 @@ class SensorMoverProperties():
                         edges[pid][n_id]['weight'] = 0.
         edges = [(nf, nt, attr['weight']) for nf in edges.keys() for nt, attr in edges[nf].iteritems()]
         return edges
+
+
+def filter_nodes(nodes, sensor_mover_property=None, node_props=None):
+    if sensor_mover_property:
+        smpd = sensor_mover_property
+    elif node_props:
+        smpd = SensorMoverProperties(internal=InternalNodeProperties(node_props['Internal']),
+                                     motor=MotorNodeProperties(node_props['Motor']),
+                                     sensors=SensoryNodeProperties(node_props['Sensory']))
+    else:
+        return nodes
+    p = []
+    for nid, attrs in enumerate(nodes):
+        node_class = getattr(smpd, attrs[1]['node_class'].lower())  # 'sensory', 'motor', 'internal'
+        props = node_class.get_one_sample()  # sample
+        for u, v in attrs[1].iteritems():
+            if attrs[1].has_key(u):
+                props[u] = v
+        p.append((attrs[0], props))
+    return p
